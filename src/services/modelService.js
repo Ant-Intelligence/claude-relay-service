@@ -29,6 +29,15 @@ class ModelService {
    */
   getClaudeModelMetadata() {
     return {
+      // Claude 4.6 系列
+      'claude-opus-4-6': {
+        display_name: 'Claude 4.6 Opus',
+        created_at: '2026-02-05T00:00:00Z'
+      },
+      'claude-opus-4-6-20260205': {
+        display_name: 'Claude 4.6 Opus',
+        created_at: '2026-02-05T00:00:00Z'
+      },
       // Claude 4.5 系列
       'claude-opus-4-5-20251101': {
         display_name: 'Claude 4.5 Opus',
@@ -117,6 +126,8 @@ class ModelService {
         provider: 'anthropic',
         description: 'Claude models from Anthropic',
         models: [
+          // Claude 4.6 系列
+          'claude-opus-4-6',
           // Claude 4.5 系列
           'claude-opus-4-5-20251101',
           'claude-sonnet-4-5-20250929',

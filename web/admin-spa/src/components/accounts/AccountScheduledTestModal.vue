@@ -305,12 +305,16 @@ export default {
         claude: [
           'claude-haiku-4-5-20251001',
           'claude-sonnet-4-5-20250929',
-          'claude-opus-4-5-20251101'
+          'claude-opus-4-5-20251101',
+          'claude-opus-4-6',
+          'claude-opus-4-6-20260205'
         ],
         'claude-console': [
           'claude-haiku-4-5-20251001',
           'claude-sonnet-4-5-20250929',
-          'claude-opus-4-5-20251101'
+          'claude-opus-4-5-20251101',
+          'claude-opus-4-6',
+          'claude-opus-4-6-20260205'
         ],
         gemini: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash']
       }
