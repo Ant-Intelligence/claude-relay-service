@@ -28,6 +28,7 @@
     "status": "bash scripts/status-unified.sh",
     "status:detail": "bash scripts/status-unified.sh --detail",
     "test": "jest",
+    "test:integration": "jest --testMatch='**/tests/integration/**/*.test.js'",
     "lint": "eslint src/**/*.js cli/**/*.js scripts/**/*.js --fix",
     "lint:check": "eslint src/**/*.js cli/**/*.js scripts/**/*.js",
     "format": "prettier --write \"src/**/*.js\" \"cli/**/*.js\" \"scripts/**/*.js\"",
@@ -97,6 +98,9 @@
     "claude-code",
     "anthropic"
   ],
+  "jest": {
+    "testMatch": ["**/tests/unit/**/*.test.js"]
+  },
   "author": "Claude Relay Service",
   "license": "MIT"
 }
