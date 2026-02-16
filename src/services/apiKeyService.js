@@ -780,8 +780,12 @@ class ApiKeyService {
         filterTag = ''
       } = options
 
-      // 1️⃣ 获取所有API Key的基本信息（使用索引优化，O(1)性能）
-      let apiKeys = await redis.getAllApiKeysFromIndex()
+      // 1️⃣ 获取所有API Key的基本信息
+      // 按所属账号搜索时需要完整数据（包含绑定字段），使用全量加载
+      let apiKeys =
+        searchMode === 'bindingAccount' && searchQuery
+          ? await redis.getAllApiKeys()
+          : await redis.getAllApiKeysFromIndex()
       const client = redis.getClientSafe()
       const accountInfoCache = new Map()
 

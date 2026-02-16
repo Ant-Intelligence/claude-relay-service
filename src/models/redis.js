@@ -191,8 +191,8 @@ class RedisClient {
     const keys = await this.scanKeys('apikey:*')
     const apiKeys = []
     for (const key of keys) {
-      // 过滤掉hash_map，它不是真正的API Key
-      if (key === 'apikey:hash_map') {
+      // 过滤掉hash_map和index，它们不是真正的API Key
+      if (key === 'apikey:hash_map' || key === 'apikey:index') {
         continue
       }
 
@@ -220,7 +220,15 @@ class RedisClient {
     // 排序字段
     'lastUsedAt',
     'tokenLimit',
-    'concurrencyLimit'
+    'concurrencyLimit',
+    // 账户绑定字段（用于按所属账号搜索）
+    'claudeAccountId',
+    'claudeConsoleAccountId',
+    'geminiAccountId',
+    'openaiAccountId',
+    'azureOpenaiAccountId',
+    'bedrockAccountId',
+    'droidAccountId'
   ]
 
   // 更新 API Key 索引
