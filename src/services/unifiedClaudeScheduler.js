@@ -614,7 +614,7 @@ class UnifiedClaudeScheduler {
         }
       }
 
-      logger.info(
+      logger.debug(
         `🔍 Checking Claude Console account: ${currentAccount.name} - isActive: ${currentAccount.isActive}, status: ${currentAccount.status}, accountType: ${currentAccount.accountType}, schedulable: ${currentAccount.schedulable}`
       )
 
@@ -673,7 +673,7 @@ class UnifiedClaudeScheduler {
               priority: parseInt(currentAccount.priority) || 50,
               lastUsedAt: currentAccount.lastUsedAt || '0'
             })
-            logger.info(
+            logger.debug(
               `✅ Added Claude Console account to available pool: ${currentAccount.name} (priority: ${currentAccount.priority}, no concurrency limit)`
             )
           }
@@ -686,7 +686,7 @@ class UnifiedClaudeScheduler {
           }
         }
       } else {
-        logger.info(
+        logger.debug(
           `❌ Claude Console account ${currentAccount.name} not eligible - isActive: ${currentAccount.isActive}, status: ${currentAccount.status}, accountType: ${currentAccount.accountType}, schedulable: ${currentAccount.schedulable}`
         )
       }
@@ -739,7 +739,7 @@ class UnifiedClaudeScheduler {
       logger.debug(`📋 Found ${bedrockAccounts.length} total Bedrock accounts`)
 
       for (const account of bedrockAccounts) {
-        logger.info(
+        logger.debug(
           `🔍 Checking Bedrock account: ${account.name} - isActive: ${account.isActive}, accountType: ${account.accountType}, schedulable: ${account.schedulable}`
         )
 
@@ -757,11 +757,11 @@ class UnifiedClaudeScheduler {
             priority: parseInt(account.priority) || 50,
             lastUsedAt: account.lastUsedAt || '0'
           })
-          logger.info(
+          logger.debug(
             `✅ Added Bedrock account to available pool: ${account.name} (priority: ${account.priority})`
           )
         } else {
-          logger.info(
+          logger.debug(
             `❌ Bedrock account ${account.name} not eligible - isActive: ${account.isActive}, accountType: ${account.accountType}, schedulable: ${account.schedulable}`
           )
         }
@@ -774,7 +774,7 @@ class UnifiedClaudeScheduler {
       logger.debug(`📋 Found ${ccrAccounts.length} total CCR accounts`)
 
       for (const account of ccrAccounts) {
-        logger.info(
+        logger.debug(
           `🔍 Checking CCR account: ${account.name} - isActive: ${account.isActive}, status: ${account.status}, accountType: ${account.accountType}, schedulable: ${account.schedulable}`
         )
 
@@ -809,7 +809,7 @@ class UnifiedClaudeScheduler {
               priority: parseInt(account.priority) || 50,
               lastUsedAt: account.lastUsedAt || '0'
             })
-            logger.info(
+            logger.debug(
               `✅ Added CCR account to available pool: ${account.name} (priority: ${account.priority})`
             )
           } else {
@@ -821,7 +821,7 @@ class UnifiedClaudeScheduler {
             }
           }
         } else {
-          logger.info(
+          logger.debug(
             `❌ CCR account ${account.name} not eligible - isActive: ${account.isActive}, status: ${account.status}, accountType: ${account.accountType}, schedulable: ${account.schedulable}`
           )
         }
