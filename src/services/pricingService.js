@@ -28,45 +28,10 @@ class PricingService {
     this.updateTimer = null // 定时更新任务句柄
     this.hashSyncInProgress = false // 哈希同步状态
 
-    // 硬编码的 1 小时缓存价格（美元/百万 token）
+    // 1 小时缓存价格（美元/token），从 model_pricing.json 的 cache_creation_input_token_cost_above_1hr 字段动态构建
     // ephemeral_5m 的价格使用 model_pricing.json 中的 cache_creation_input_token_cost
-    // ephemeral_1h 的价格需要硬编码
-    this.ephemeral1hPricing = {
-      // Opus 4.6 系列: $10/MTok
-      'claude-opus-4-6': 0.00001,
-      'claude-opus-4-6-20260205': 0.00001,
-
-      // Opus 系列: $30/MTok
-      'claude-opus-4-1': 0.00003,
-      'claude-opus-4-1-20250805': 0.00003,
-      'claude-opus-4': 0.00003,
-      'claude-opus-4-20250514': 0.00003,
-      'claude-3-opus': 0.00003,
-      'claude-3-opus-latest': 0.00003,
-      'claude-3-opus-20240229': 0.00003,
-
-      // Sonnet 系列: $6/MTok
-      'claude-3-5-sonnet': 0.000006,
-      'claude-3-5-sonnet-latest': 0.000006,
-      'claude-3-5-sonnet-20241022': 0.000006,
-      'claude-3-5-sonnet-20240620': 0.000006,
-      'claude-3-sonnet': 0.000006,
-      'claude-3-sonnet-20240307': 0.000006,
-      'claude-sonnet-3': 0.000006,
-      'claude-sonnet-3-5': 0.000006,
-      'claude-sonnet-3-7': 0.000006,
-      'claude-sonnet-4': 0.000006,
-      'claude-sonnet-4-20250514': 0.000006,
-
-      // Haiku 系列: $1.6/MTok
-      'claude-3-5-haiku': 0.0000016,
-      'claude-3-5-haiku-latest': 0.0000016,
-      'claude-3-5-haiku-20241022': 0.0000016,
-      'claude-3-haiku': 0.0000016,
-      'claude-3-haiku-20240307': 0.0000016,
-      'claude-haiku-3': 0.0000016,
-      'claude-haiku-3-5': 0.0000016
-    }
+    // 在 pricingData 加载后通过 buildEphemeral1hPricing() 自动填充
+    this.ephemeral1hPricing = {}
 
     // 硬编码的 1M 上下文模型价格（美元/token）
     // 当总输入 tokens 超过 200k 时使用这些价格
@@ -301,6 +266,7 @@ class PricingService {
             // 更新内存中的数据
             this.pricingData = jsonData
             this.lastUpdated = new Date()
+            this.buildEphemeral1hPricing()
 
             logger.success(`💰 Downloaded pricing data for ${Object.keys(jsonData).length} models`)
 
@@ -334,6 +300,7 @@ class PricingService {
 
         const stats = fs.statSync(this.pricingFile)
         this.lastUpdated = stats.mtime
+        this.buildEphemeral1hPricing()
 
         logger.info(
           `💰 Loaded pricing data for ${Object.keys(this.pricingData).length} models from cache`
@@ -346,6 +313,28 @@ class PricingService {
       logger.error('❌ Failed to load pricing data:', error)
       await this.useFallbackPricing()
     }
+  }
+
+  // 从 pricingData 中构建 ephemeral1hPricing 映射表（仅 Claude 官方模型）
+  buildEphemeral1hPricing() {
+    if (!this.pricingData) {
+      return
+    }
+
+    const newMap = {}
+    for (const [model, pricing] of Object.entries(this.pricingData)) {
+      if (
+        model.startsWith('claude-') &&
+        !model.includes('/') &&
+        !model.includes('.') &&
+        pricing?.cache_creation_input_token_cost_above_1hr
+      ) {
+        newMap[model] = pricing.cache_creation_input_token_cost_above_1hr
+      }
+    }
+
+    this.ephemeral1hPricing = newMap
+    logger.info(`💰 Built ephemeral 1h pricing map: ${Object.keys(newMap).length} models`)
   }
 
   // 使用fallback价格数据
@@ -367,6 +356,7 @@ class PricingService {
         // 更新内存中的数据
         this.pricingData = jsonData
         this.lastUpdated = new Date()
+        this.buildEphemeral1hPricing()
 
         // 设置或重新设置文件监听器
         this.setupFileWatcher()
@@ -381,10 +371,12 @@ class PricingService {
           '❌ Please ensure the resources/model-pricing directory exists with the pricing file'
         )
         this.pricingData = {}
+        this.buildEphemeral1hPricing()
       }
     } catch (error) {
       logger.error('❌ Failed to use fallback pricing data:', error)
       this.pricingData = {}
+      this.buildEphemeral1hPricing()
     }
   }
 
@@ -472,17 +464,25 @@ class PricingService {
       return 0
     }
 
-    // 尝试直接匹配
+    // 尝试直接匹配（从 model_pricing.json 动态构建的映射表）
     if (this.ephemeral1hPricing[modelName]) {
       return this.ephemeral1hPricing[modelName]
     }
 
-    // 处理各种模型名称变体
+    // 尝试通过 getModelPricing 模糊匹配（处理 Bedrock 区域前缀等变体模型名）
+    const pricing = this.getModelPricing(modelName)
+    if (pricing?.cache_creation_input_token_cost_above_1hr) {
+      logger.debug(
+        `💰 Found 1h cache pricing for ${modelName} via fuzzy match: ${pricing.cache_creation_input_token_cost_above_1hr}`
+      )
+      return pricing.cache_creation_input_token_cost_above_1hr
+    }
+
+    // 兜底：仅在 model_pricing.json 中完全找不到该模型时触发，使用最新主力模型价格
     const modelLower = modelName.toLowerCase()
 
-    // 检查是否是 Opus 系列
     if (modelLower.includes('opus')) {
-      return 0.00003 // $30/MTok
+      return 0.00001 // $10/MTok (opus-4-5/4-6)
     }
 
     // 检查是否是 Sonnet 系列
@@ -492,7 +492,7 @@ class PricingService {
 
     // 检查是否是 Haiku 系列
     if (modelLower.includes('haiku')) {
-      return 0.0000016 // $1.6/MTok
+      return 0.000002 // $2/MTok (haiku-4-5)
     }
 
     // 默认返回 0（未知模型）
@@ -936,6 +936,7 @@ class PricingService {
       // 更新内存中的数据
       this.pricingData = jsonData
       this.lastUpdated = new Date()
+      this.buildEphemeral1hPricing()
 
       const modelCount = Object.keys(jsonData).length
       logger.success(`💰 Reloaded pricing data for ${modelCount} models from file`)

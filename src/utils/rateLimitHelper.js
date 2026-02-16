@@ -7,7 +7,13 @@ function toNumber(value) {
   return Number.isFinite(num) ? num : 0
 }
 
-async function updateRateLimitCounters(rateLimitInfo, usageSummary, model, useBooster = false) {
+async function updateRateLimitCounters(
+  rateLimitInfo,
+  usageSummary,
+  model,
+  useBooster = false,
+  usageObject = null
+) {
   if (!rateLimitInfo) {
     return { totalTokens: 0, totalCost: 0 }
   }
@@ -30,7 +36,8 @@ async function updateRateLimitCounters(rateLimitInfo, usageSummary, model, useBo
   }
 
   let totalCost = 0
-  const usagePayload = {
+  // 优先使用完整的 usageObject（含 cache_creation 详情），确保与周限制使用相同的定价
+  const usagePayload = usageObject || {
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     cache_creation_input_tokens: cacheCreateTokens,

@@ -27,7 +27,8 @@ function queueRateLimitUpdate(
   usageSummary,
   model,
   context = '',
-  useBooster = false
+  useBooster = false,
+  usageObject = null
 ) {
   if (!rateLimitInfo) {
     return
@@ -35,7 +36,7 @@ function queueRateLimitUpdate(
 
   const label = context ? ` (${context})` : ''
 
-  updateRateLimitCounters(rateLimitInfo, usageSummary, model, useBooster)
+  updateRateLimitCounters(rateLimitInfo, usageSummary, model, useBooster, usageObject)
     .then(({ totalTokens, totalCost }) => {
       if (totalTokens > 0) {
         logger.api(`📊 Updated rate limit token count${label}: +${totalTokens} tokens`)
@@ -306,7 +307,8 @@ async function handleChatCompletion(req, res, apiKeyData) {
             },
             model,
             `openai-${accountType}-stream`,
-            apiKeyData.useBooster
+            apiKeyData.useBooster,
+            usage
           )
         }
       }
@@ -433,7 +435,8 @@ async function handleChatCompletion(req, res, apiKeyData) {
           },
           claudeRequest.model,
           `openai-${accountType}-non-stream`,
-          apiKeyData.useBooster
+          apiKeyData.useBooster,
+          usage
         )
       }
 

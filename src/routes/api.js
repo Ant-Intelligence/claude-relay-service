@@ -75,7 +75,8 @@ function queueRateLimitUpdate(
   usageSummary,
   model,
   context = '',
-  useBooster = false
+  useBooster = false,
+  usageObject = null
 ) {
   if (!rateLimitInfo) {
     return Promise.resolve({ totalTokens: 0, totalCost: 0 })
@@ -83,7 +84,7 @@ function queueRateLimitUpdate(
 
   const label = context ? ` (${context})` : ''
 
-  return updateRateLimitCounters(rateLimitInfo, usageSummary, model, useBooster)
+  return updateRateLimitCounters(rateLimitInfo, usageSummary, model, useBooster, usageObject)
     .then(({ totalTokens, totalCost }) => {
       if (totalTokens > 0) {
         logger.api(`📊 Updated rate limit token count${label}: +${totalTokens} tokens`)
@@ -280,7 +281,8 @@ async function handleMessagesRequest(req, res) {
                 { inputTokens, outputTokens, cacheCreateTokens, cacheReadTokens },
                 model,
                 'claude-stream',
-                req.apiKey.useBooster
+                req.apiKey.useBooster,
+                usageObject
               )
 
               usageDataCaptured = true
@@ -346,7 +348,8 @@ async function handleMessagesRequest(req, res) {
                     { inputTokens, outputTokens, cacheCreateTokens, cacheReadTokens },
                     model,
                     'claude-console-stream',
-                    req.apiKey.useBooster
+                    req.apiKey.useBooster,
+                    usageObject
                   )
 
                   usageDataCaptured = true
@@ -487,7 +490,8 @@ async function handleMessagesRequest(req, res) {
                 },
                 model,
                 'ccr-stream',
-                req.apiKey.useBooster
+                req.apiKey.useBooster,
+                usageObject
               )
 
               usageDataCaptured = true
@@ -610,7 +614,8 @@ async function handleMessagesRequest(req, res) {
                   { inputTokens, outputTokens, cacheCreateTokens, cacheReadTokens },
                   model,
                   'claude-console-non-stream',
-                  req.apiKey.useBooster
+                  req.apiKey.useBooster,
+                  usageObject
                 )
 
                 logger.api(
@@ -775,7 +780,8 @@ async function handleMessagesRequest(req, res) {
             },
             model,
             'claude-non-stream',
-            req.apiKey.useBooster
+            req.apiKey.useBooster,
+            jsonData.usage
           )
 
           usageRecorded = true
