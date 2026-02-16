@@ -665,18 +665,16 @@ class PricingService {
       // 有详细的缓存创建数据
       const ephemeral5mTokens = usage.cache_creation.ephemeral_5m_input_tokens || 0
       const ephemeral1hTokens = usage.cache_creation.ephemeral_1h_input_tokens || 0
+      const totalCacheTokens = ephemeral5mTokens + ephemeral1hTokens
 
-      // 5分钟缓存使用标准的 cache_creation_input_token_cost
-      ephemeral5mCost = ephemeral5mTokens * (pricing?.cache_creation_input_token_cost || 0)
-
-      // 1小时缓存使用硬编码的价格
-      const ephemeral1hPrice = this.getEphemeral1hPricing(modelName)
-      ephemeral1hCost = ephemeral1hTokens * ephemeral1hPrice
-
-      // 总的缓存创建费用
-      cacheCreateCost = ephemeral5mCost + ephemeral1hCost
+      // 统一按 cache_creation_input_token_cost (1.25×) 定价
+      // 与 Claude Code 官方保持一致：所有 cache_creation_input_tokens 使用相同单价
+      const cacheWritePrice = pricing?.cache_creation_input_token_cost || 0
+      cacheCreateCost = totalCacheTokens * cacheWritePrice
+      ephemeral5mCost = ephemeral5mTokens * cacheWritePrice
+      ephemeral1hCost = ephemeral1hTokens * cacheWritePrice
     } else if (usage.cache_creation_input_tokens) {
-      // 旧格式，所有缓存创建 tokens 都按 5 分钟价格计算（向后兼容）
+      // 旧格式，所有缓存创建 tokens 都按标准缓存写入价格计算（向后兼容）
       cacheCreateCost =
         (usage.cache_creation_input_tokens || 0) * (pricing?.cache_creation_input_token_cost || 0)
       ephemeral5mCost = cacheCreateCost
