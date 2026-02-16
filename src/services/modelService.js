@@ -138,7 +138,9 @@ class ModelService {
         provider: 'openai',
         description: 'OpenAI GPT models',
         models: [
-          // GPT-5.2 系列（最新）
+          // GPT-5.3 系列（最新）
+          'gpt-5.3-codex',
+          // GPT-5.2 系列
           'gpt-5.2-2025-12-11',
           'gpt-5.2-codex',
           'gpt-5.2-codex-mini',
