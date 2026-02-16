@@ -2453,6 +2453,7 @@ const loadApiKeys = async () => {
       pageSize: apiKeysStore.pagination.pageSize,
       sortBy: apiKeysSortBy.value || 'createdAt',
       sortOrder: apiKeysSortOrder.value || 'desc',
+      searchMode: searchMode.value || 'apiKey',
       search: searchKeyword.value || '',
       status: 'all',
       permissions: 'all',

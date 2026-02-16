@@ -31,6 +31,7 @@ export const useApiKeysStore = defineStore('apiKeys', () => {
         pageSize: options.pageSize || pagination.value.pageSize,
         sortBy: options.sortBy || sortBy.value || 'createdAt',
         sortOrder: options.sortOrder || sortOrder.value || 'desc',
+        searchMode: options.searchMode || 'apiKey',
         search: options.search || '',
         status: options.status || 'all',
         permissions: options.permissions || 'all',

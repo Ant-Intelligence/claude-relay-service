@@ -773,6 +773,7 @@ class ApiKeyService {
         includeDeleted = false,
         sortBy = 'createdAt',
         sortOrder = 'desc',
+        searchMode = 'apiKey',
         searchQuery = '',
         filterStatus = 'all',
         filterPermissions = 'all',
@@ -824,13 +825,37 @@ class ApiKeyService {
       // 搜索过滤
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
-        apiKeys = apiKeys.filter(
-          (key) =>
-            key.name?.toLowerCase().includes(query) ||
-            key.description?.toLowerCase().includes(query) ||
-            key.id?.toLowerCase().includes(query) ||
-            (key.tags && JSON.stringify(key.tags).toLowerCase().includes(query))
-        )
+        if (searchMode === 'bindingAccount') {
+          // 按所属账号搜索：构建账户ID→名称映射，然后过滤
+          const accountNameMap = await this._buildAccountNameMap()
+          apiKeys = apiKeys.filter((key) => {
+            const bindingFields = [
+              'claudeAccountId',
+              'claudeConsoleAccountId',
+              'geminiAccountId',
+              'openaiAccountId',
+              'azureOpenaiAccountId',
+              'bedrockAccountId',
+              'droidAccountId'
+            ]
+            return bindingFields.some((field) => {
+              const accountId = key[field]
+              if (!accountId) return false
+              const accountName = accountNameMap.get(accountId)
+              if (accountName && accountName.toLowerCase().includes(query)) return true
+              // 也匹配账户ID本身（前8位或完整ID）
+              return accountId.toLowerCase().includes(query)
+            })
+          })
+        } else {
+          apiKeys = apiKeys.filter(
+            (key) =>
+              key.name?.toLowerCase().includes(query) ||
+              key.description?.toLowerCase().includes(query) ||
+              key.id?.toLowerCase().includes(query) ||
+              (key.tags && JSON.stringify(key.tags).toLowerCase().includes(query))
+          )
+        }
       }
 
       // 3️⃣ 排序（支持计算字段）
@@ -2287,6 +2312,98 @@ class ApiKeyService {
       logger.error('❌ Failed to cleanup expired keys:', error)
       return 0
     }
+  }
+
+  /**
+   * 构建账户ID→名称的映射表，用于按所属账号搜索
+   * @returns {Map<string, string>} accountId → accountName
+   */
+  async _buildAccountNameMap() {
+    const nameMap = new Map()
+    try {
+      const claudeAccountService = require('./claudeAccountService')
+      const claudeConsoleAccountService = require('./claudeConsoleAccountService')
+      const geminiAccountService = require('./geminiAccountService')
+      const geminiApiAccountService = require('./geminiApiAccountService')
+      const openaiResponsesAccountService = require('./openaiResponsesAccountService')
+      const bedrockAccountService = require('./bedrockAccountService')
+      const droidAccountService = require('./droidAccountService')
+      const azureOpenaiAccountService = require('./azureOpenaiAccountService')
+      const accountGroupService = require('./accountGroupService')
+
+      // 并行获取所有账户列表
+      const [
+        claudeAccounts,
+        consoleAccounts,
+        geminiAccounts,
+        geminiApiAccounts,
+        openaiResponsesAccounts,
+        bedrockAccounts,
+        droidAccounts,
+        azureAccounts,
+        allGroups
+      ] = await Promise.all([
+        claudeAccountService.getAllAccounts({ skipExtendedInfo: true }).catch(() => []),
+        claudeConsoleAccountService.getAllAccounts({ skipExtendedInfo: true }).catch(() => []),
+        geminiAccountService.getAllAccounts().catch(() => []),
+        geminiApiAccountService.getAllAccounts(true).catch(() => []),
+        openaiResponsesAccountService.getAllAccounts(true).catch(() => []),
+        bedrockAccountService.getAllAccounts().catch(() => []),
+        droidAccountService.getAllAccounts().catch(() => []),
+        azureOpenaiAccountService.getAllAccounts().catch(() => []),
+        accountGroupService.getAllGroups().catch(() => [])
+      ])
+
+      // Claude 官方账户
+      for (const acc of claudeAccounts) {
+        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+      }
+      // Claude Console 账户
+      for (const acc of consoleAccounts) {
+        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+      }
+      // Gemini OAuth 账户
+      for (const acc of geminiAccounts) {
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+        }
+      }
+      // Gemini API 账户
+      for (const acc of geminiApiAccounts) {
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+          nameMap.set(`api:${acc.id}`, acc.name)
+        }
+      }
+      // OpenAI Responses 账户
+      for (const acc of openaiResponsesAccounts) {
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+          nameMap.set(`responses:${acc.id}`, acc.name)
+        }
+      }
+      // Bedrock 账户
+      for (const acc of bedrockAccounts) {
+        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+      }
+      // Droid 账户
+      for (const acc of droidAccounts) {
+        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+      }
+      // Azure OpenAI 账户
+      for (const acc of azureAccounts) {
+        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+      }
+      // 账户分组
+      for (const group of allGroups) {
+        if (group.id && group.name) {
+          nameMap.set(`group:${group.id}`, group.name)
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Failed to build account name map:', error)
+    }
+    return nameMap
   }
 }
 
