@@ -86,7 +86,15 @@
             </div>
             <div class="flex items-center justify-between text-sm">
               <span class="text-gray-500 dark:text-gray-400">测试模型</span>
-              <span class="font-medium text-gray-700 dark:text-gray-300">{{ testModel }}</span>
+              <select
+                v-model="testModel"
+                class="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-sm font-medium text-gray-700 transition hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-500 dark:focus:border-blue-500"
+                :disabled="testStatus === 'testing'"
+              >
+                <option v-for="m in commonTestModels" :key="m.value" :value="m.value">
+                  {{ m.label }}
+                </option>
+              </select>
             </div>
           </div>
 
@@ -217,7 +225,25 @@ const testStartTime = ref(null)
 const eventSource = ref(null)
 
 // 测试模型
-const testModel = ref('claude-opus-4-5-20251101')
+const testModel = ref('claude-haiku-4-5-20251001')
+
+// 常用测试模型列表
+const commonTestModels = computed(() => {
+  if (props.account?.platform === 'bedrock') {
+    return [
+      { value: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', label: 'Claude Haiku 4.5' },
+      { value: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', label: 'Claude Sonnet 4.5' },
+      { value: 'us.anthropic.claude-opus-4-5-20251101-v1:0', label: 'Claude Opus 4.5' },
+      { value: 'us.anthropic.claude-opus-4-6-20260205-v1:0', label: 'Claude Opus 4.6' }
+    ]
+  }
+  return [
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+    { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
+    { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
+    { value: 'claude-opus-4-6-20260205', label: 'Claude Opus 4.6' }
+  ]
+})
 
 // 计算属性
 const platformLabel = computed(() => {
@@ -533,19 +559,11 @@ watch(
       errorMessage.value = ''
       testDuration.value = 0
 
-      // 根据平台和账号类型设置测试模型
+      // 根据平台设置默认测试模型（默认使用Haiku，更快更便宜）
       if (props.account?.platform === 'bedrock') {
-        const credentialType = props.account.credentialType
-        if (credentialType === 'bearer_token') {
-          // Bearer Token 模式使用 Sonnet 4.5
-          testModel.value = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-        } else {
-          // Access Key 模式使用 Haiku（更快更便宜）
-          testModel.value = 'us.anthropic.claude-3-5-haiku-20241022-v1:0'
-        }
+        testModel.value = 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
       } else {
-        // 其他平台使用默认模型
-        testModel.value = 'claude-sonnet-4-5-20250929'
+        testModel.value = 'claude-haiku-4-5-20251001'
       }
     }
   }
