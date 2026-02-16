@@ -1134,6 +1134,7 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       dailyCostLimit,
       totalCostLimit,
       weeklyOpusCostLimit,
+      weeklyCostLimit,
       tags,
       activationDays, // 新增：激活后有效天数
       activationUnit, // 新增：激活时间单位 (hours/days)
@@ -1290,6 +1291,7 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       dailyCostLimit,
       totalCostLimit,
       weeklyOpusCostLimit,
+      weeklyCostLimit,
       tags,
       activationDays,
       activationUnit,
@@ -1332,6 +1334,7 @@ router.post('/api-keys/batch', authenticateAdmin, async (req, res) => {
       dailyCostLimit,
       totalCostLimit,
       weeklyOpusCostLimit,
+      weeklyCostLimit,
       tags,
       activationDays,
       activationUnit,
@@ -1391,6 +1394,7 @@ router.post('/api-keys/batch', authenticateAdmin, async (req, res) => {
           dailyCostLimit,
           totalCostLimit,
           weeklyOpusCostLimit,
+          weeklyCostLimit,
           tags,
           activationDays,
           activationUnit,

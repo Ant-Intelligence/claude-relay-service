@@ -592,6 +592,7 @@ NEVER proactively create documentation files (\*.md) or README files. Only creat
 - Redis (existing infrastructure, ioredis client) (001-console-model-alert)
 - Node.js 18+ (ES2020+) + Express.js 4.18.2, ioredis 5.3.2, winston 3.11.0 (001-fix-group-scheduling)
 - Redis (hash storage with `account_group:{id}` and `account_group_members:{id}` patterns) (001-fix-group-scheduling)
+- Node.js 18+ + Express.js 4.18.2, ioredis 5.3.2 (001-fix-apikey-weekly-limit)
 
 ## Recent Changes
 - 001-image-billing: Added Node.js 18+ + Express.js, ioredis, axios, winston
