@@ -844,9 +844,13 @@ class ApiKeyService {
             ]
             return bindingFields.some((field) => {
               const accountId = key[field]
-              if (!accountId) return false
+              if (!accountId) {
+                return false
+              }
               const accountName = accountNameMap.get(accountId)
-              if (accountName && accountName.toLowerCase().includes(query)) return true
+              if (accountName && accountName.toLowerCase().includes(query)) {
+                return true
+              }
               // 也匹配账户ID本身（前8位或完整ID）
               return accountId.toLowerCase().includes(query)
             })
@@ -2360,11 +2364,15 @@ class ApiKeyService {
 
       // Claude 官方账户
       for (const acc of claudeAccounts) {
-        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+        }
       }
       // Claude Console 账户
       for (const acc of consoleAccounts) {
-        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+        }
       }
       // Gemini OAuth 账户
       for (const acc of geminiAccounts) {
@@ -2388,15 +2396,21 @@ class ApiKeyService {
       }
       // Bedrock 账户
       for (const acc of bedrockAccounts) {
-        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+        }
       }
       // Droid 账户
       for (const acc of droidAccounts) {
-        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+        }
       }
       // Azure OpenAI 账户
       for (const acc of azureAccounts) {
-        if (acc.id && acc.name) nameMap.set(acc.id, acc.name)
+        if (acc.id && acc.name) {
+          nameMap.set(acc.id, acc.name)
+        }
       }
       // 账户分组
       for (const group of allGroups) {
