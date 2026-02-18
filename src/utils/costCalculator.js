@@ -52,6 +52,20 @@ const MODEL_PRICING = {
     cacheRead: 0.5
   },
 
+  // Claude Sonnet 4.6
+  'claude-sonnet-4-6': {
+    input: 3.0,
+    output: 15.0,
+    cacheWrite: 3.75,
+    cacheRead: 0.3
+  },
+  'claude-sonnet-4-6-20260218': {
+    input: 3.0,
+    output: 15.0,
+    cacheWrite: 3.75,
+    cacheRead: 0.3
+  },
+
   // Claude Opus 4.1 (新模型)
   'claude-opus-4-1-20250805': {
     input: 15.0,

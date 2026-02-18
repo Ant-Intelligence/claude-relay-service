@@ -38,6 +38,14 @@ class ModelService {
         display_name: 'Claude 4.6 Opus',
         created_at: '2026-02-05T00:00:00Z'
       },
+      'claude-sonnet-4-6': {
+        display_name: 'Claude 4.6 Sonnet',
+        created_at: '2026-02-18T00:00:00Z'
+      },
+      'claude-sonnet-4-6-20260218': {
+        display_name: 'Claude 4.6 Sonnet',
+        created_at: '2026-02-18T00:00:00Z'
+      },
       // Claude 4.5 系列
       'claude-opus-4-5-20251101': {
         display_name: 'Claude 4.5 Opus',
@@ -128,6 +136,7 @@ class ModelService {
         models: [
           // Claude 4.6 系列
           'claude-opus-4-6',
+          'claude-sonnet-4-6',
           // Claude 4.5 系列
           'claude-opus-4-5-20251101',
           'claude-sonnet-4-5-20250929',
