@@ -401,6 +401,15 @@ class PricingService {
       }
     }
 
+    // 特殊处理：gpt-5.3-codex 回退到 gpt-5.2-codex（OpenAI 尚未公布 gpt-5.3-codex API 定价）
+    if (modelName === 'gpt-5.3-codex' && !this.pricingData['gpt-5.3-codex']) {
+      const fallbackPricing = this.pricingData['gpt-5.2-codex']
+      if (fallbackPricing) {
+        logger.info(`💰 Using gpt-5.2-codex pricing as fallback for ${modelName}`)
+        return fallbackPricing
+      }
+    }
+
     // 对于Bedrock区域前缀模型（如 us.anthropic.claude-sonnet-4-20250514-v1:0），
     // 尝试去掉区域前缀进行匹配
     if (modelName.includes('.anthropic.') || modelName.includes('.claude')) {
@@ -416,8 +425,14 @@ class PricingService {
 
     // 尝试模糊匹配（处理版本号等变化）
     const normalizedModel = modelName.toLowerCase().replace(/[_-]/g, '')
+    const modelHasVendorPrefix = modelName.includes('/')
 
     for (const [key, value] of Object.entries(this.pricingData)) {
+      // 跳过带 vendor 前缀的 key（如 github_copilot/xxx、openai/xxx），
+      // 避免将无前缀模型名（如 gpt-5.3-codex）误匹配到其他 provider 的同名 key
+      if (key.includes('/') && !modelHasVendorPrefix) {
+        continue
+      }
       const normalizedKey = key.toLowerCase().replace(/[_-]/g, '')
       if (normalizedKey.includes(normalizedModel) || normalizedModel.includes(normalizedKey)) {
         logger.debug(`💰 Found pricing for ${modelName} using fuzzy match: ${key}`)
