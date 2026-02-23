@@ -316,7 +316,7 @@ export default {
           'claude-opus-4-6',
           'claude-opus-4-6-20260205'
         ],
-        gemini: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash']
+        gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview']
       }
       return models[this.platform] || models.claude
     },
@@ -370,7 +370,7 @@ export default {
     initializeDefaultModel() {
       // Set appropriate default model based on platform
       if (this.platform === 'gemini') {
-        this.config.model = 'gemini-2.0-flash-exp'
+        this.config.model = 'gemini-2.5-flash'
       } else if (this.platform === 'claude-console') {
         this.config.model = 'claude-haiku-4-5-20251001'
       } else {
