@@ -3991,7 +3991,11 @@ onMounted(() => {
 
 // 测试账户相关方法
 const canTestAccount = (account) => {
-  return account.platform === 'claude' || account.platform === 'claude-console'
+  return (
+    account.platform === 'claude' ||
+    account.platform === 'claude-console' ||
+    account.platform === 'gemini'
+  )
 }
 
 const openAccountTestModal = (account) => {

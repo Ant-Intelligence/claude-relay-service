@@ -5379,22 +5379,36 @@ router.post('/gemini-accounts/:id/reset-status', authenticateAdmin, async (req, 
 
 // 🧪 Gemini 账户定时测试配置
 
-// 测试 Gemini 账户连通性（手动触发）
+// 测试 Gemini 账户连通性（手动触发，SSE 流式响应）
 router.post('/gemini-accounts/:accountId/test', authenticateAdmin, async (req, res) => {
   const { accountId } = req.params
   const { model } = req.body
 
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+
   try {
-    const result = await accountTestSchedulerService.triggerTest(accountId, 'gemini', model)
+    res.write(`data: ${JSON.stringify({ type: 'test_start' })}\n\n`)
+    const result = await geminiAccountService.testAccount(accountId, model)
+
     if (result.success) {
-      return res.json({ success: true, message: 'Test triggered successfully' })
+      res.write(`data: ${JSON.stringify({ type: 'content', text: result.responseText })}\n\n`)
+      res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({ type: 'test_complete', success: true, usage: result.usage, duration: result.duration })}\n\n`
+      )
     } else {
-      return res.status(500).json({ error: 'Test failed', message: result.error })
+      res.write(`data: ${JSON.stringify({ type: 'error', error: result.error })}\n\n`)
     }
   } catch (error) {
     logger.error(`❌ Failed to test Gemini account:`, error)
-    return res.status(500).json({ error: 'Test failed', message: error.message })
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`)
   }
+
+  res.end()
 })
 
 // 获取账户测试配置

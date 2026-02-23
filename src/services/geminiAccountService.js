@@ -1670,6 +1670,107 @@ async function updateTempProjectId(accountId, tempProjectId) {
   }
 }
 
+// 测试账户连通性（发送真实 API 请求）
+async function testAccount(accountId, model) {
+  const axios = require('axios')
+  const GEMINI_API_BASE = 'https://cloudcode.googleapis.com/v1'
+
+  const startTime = Date.now()
+
+  try {
+    let account = await getAccount(accountId)
+    if (!account) {
+      return { success: false, error: 'Account not found' }
+    }
+
+    // 如果 token 已过期，先刷新
+    if (isTokenExpired(account)) {
+      if (!account.refreshToken) {
+        return { success: false, error: 'Token expired and no refresh token available' }
+      }
+      await refreshAccountToken(accountId)
+      account = await getAccount(accountId)
+    }
+
+    const accessToken = account.accessToken
+    if (!accessToken) {
+      return { success: false, error: 'No access token available' }
+    }
+
+    // 确保模型名称格式正确
+    let modelName = model || 'gemini-2.0-flash'
+    if (!modelName.startsWith('models/')) {
+      modelName = `models/${modelName}`
+    }
+
+    // 构造测试请求体
+    const requestBody = {
+      contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+      generationConfig: { maxOutputTokens: 100 }
+    }
+
+    // 构建 API URL（如有 projectId 使用项目特定格式）
+    const projectId = account.projectId || account.tempProjectId
+    let apiUrl
+    if (projectId) {
+      apiUrl = `${GEMINI_API_BASE}/projects/${projectId}/locations/us-central1/${modelName}:generateContent`
+    } else {
+      apiUrl = `${GEMINI_API_BASE}/${modelName}:generateContent`
+    }
+
+    const axiosConfig = {
+      method: 'POST',
+      url: apiUrl,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      data: requestBody,
+      timeout: 30000
+    }
+
+    // 添加代理配置
+    const proxyAgent = ProxyHelper.createProxyAgent(account.proxy)
+    if (proxyAgent) {
+      axiosConfig.httpsAgent = proxyAgent
+      axiosConfig.proxy = false
+      logger.info(
+        `🌐 Using proxy for Gemini testAccount: ${ProxyHelper.getProxyDescription(account.proxy)}`
+      )
+    } else {
+      // 没有代理时，使用 keepAlive agent 防止请求被 NAT/防火墙中断
+      axiosConfig.httpsAgent = keepAliveAgent
+    }
+
+    const response = await axios(axiosConfig)
+    const duration = Date.now() - startTime
+
+    const responseData = response.data
+    const responseText = responseData?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    const usageMetadata = responseData?.usageMetadata || {}
+
+    logger.info(`✅ Gemini account test successful for ${accountId}, duration: ${duration}ms`)
+
+    return {
+      success: true,
+      responseText,
+      usage: {
+        promptTokenCount: usageMetadata.promptTokenCount || 0,
+        candidatesTokenCount: usageMetadata.candidatesTokenCount || 0
+      },
+      duration
+    }
+  } catch (error) {
+    const duration = Date.now() - startTime
+    const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error'
+    logger.error(`❌ Gemini account test failed for ${accountId}:`, {
+      error: errorMessage,
+      status: error.response?.status
+    })
+    return { success: false, error: errorMessage, duration }
+  }
+}
+
 // 重置账户状态（清除所有异常状态）
 async function resetAccountStatus(accountId) {
   const account = await getAccount(accountId)
@@ -1744,6 +1845,7 @@ module.exports = {
   generateContent,
   generateContentStream,
   updateTempProjectId,
+  testAccount,
   resetAccountStatus,
   OAUTH_CLIENT_ID,
   OAUTH_SCOPES

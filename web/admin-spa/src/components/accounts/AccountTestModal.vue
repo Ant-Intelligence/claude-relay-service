@@ -237,6 +237,14 @@ const commonTestModels = computed(() => {
       { value: 'us.anthropic.claude-opus-4-6-20260205-v1:0', label: 'Claude Opus 4.6' }
     ]
   }
+  if (props.account?.platform === 'gemini') {
+    return [
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
+    ]
+  }
   return [
     { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
     { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
@@ -330,9 +338,14 @@ const statusDescription = computed(() => {
     case 'testing':
       return '正在发送测试请求并等待响应'
     case 'success':
-      return '账户可以正常访问 Claude API'
+      return props.account?.platform === 'gemini'
+        ? '账户可以正常访问 Gemini API'
+        : '账户可以正常访问 Claude API'
     case 'error':
-      return errorMessage.value || '无法连接到 Claude API'
+      return (
+        errorMessage.value ||
+        (props.account?.platform === 'gemini' ? '无法连接到 Gemini API' : '无法连接到 Claude API')
+      )
     default:
       return ''
   }
@@ -425,6 +438,9 @@ function getTestEndpoint() {
   }
   if (platform === 'bedrock') {
     return `${API_PREFIX}/admin/bedrock-accounts/${props.account.id}/test`
+  }
+  if (platform === 'gemini') {
+    return `${API_PREFIX}/admin/gemini-accounts/${props.account.id}/test`
   }
   return ''
 }
@@ -562,6 +578,8 @@ watch(
       // 根据平台设置默认测试模型（默认使用Haiku，更快更便宜）
       if (props.account?.platform === 'bedrock') {
         testModel.value = 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
+      } else if (props.account?.platform === 'gemini') {
+        testModel.value = 'gemini-2.5-flash'
       } else {
         testModel.value = 'claude-haiku-4-5-20251001'
       }
