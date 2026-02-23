@@ -349,6 +349,7 @@
 import { ref, watch } from 'vue'
 import { apiClient } from '@/config/api'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 
 const props = defineProps({
   show: {
@@ -408,7 +409,7 @@ const loadUsageStats = async () => {
       userDetails.value = userResponse.user
     }
   } catch (error) {
-    console.error('Failed to load user usage stats:', error)
+    logger.error('Failed to load user usage stats:', error)
     showToast('Failed to load usage statistics', 'error')
   } finally {
     loading.value = false

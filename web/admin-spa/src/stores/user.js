@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 import { showToast } from '@/utils/toast'
 import { API_PREFIX } from '@/config/api'
+import logger from '@/utils/logger'
 
 const API_BASE = `${API_PREFIX}/users`
 
@@ -64,7 +65,7 @@ export const useUserStore = defineStore('user', {
           )
         }
       } catch (error) {
-        console.error('Logout request failed:', error)
+        logger.error('Logout request failed:', error)
       } finally {
         this.clearAuth()
       }
@@ -92,7 +93,7 @@ export const useUserStore = defineStore('user', {
         await this.getUserProfile()
         return true
       } catch (error) {
-        console.error('Auth check failed:', error)
+        logger.error('Auth check failed:', error)
         this.clearAuth()
         return false
       }
@@ -133,7 +134,7 @@ export const useUserStore = defineStore('user', {
         const response = await axios.get(`${API_BASE}/api-keys`, { params })
         return response.data.success ? response.data.apiKeys : []
       } catch (error) {
-        console.error('Failed to fetch API keys:', error)
+        logger.error('Failed to fetch API keys:', error)
         throw error
       }
     },
@@ -144,7 +145,7 @@ export const useUserStore = defineStore('user', {
         const response = await axios.post(`${API_BASE}/api-keys`, keyData)
         return response.data
       } catch (error) {
-        console.error('Failed to create API key:', error)
+        logger.error('Failed to create API key:', error)
         throw error
       }
     },
@@ -155,7 +156,7 @@ export const useUserStore = defineStore('user', {
         const response = await axios.delete(`${API_BASE}/api-keys/${keyId}`)
         return response.data
       } catch (error) {
-        console.error('Failed to delete API key:', error)
+        logger.error('Failed to delete API key:', error)
         throw error
       }
     },
@@ -166,7 +167,7 @@ export const useUserStore = defineStore('user', {
         const response = await axios.get(`${API_BASE}/usage-stats`, { params })
         return response.data.success ? response.data.stats : null
       } catch (error) {
-        console.error('Failed to fetch usage stats:', error)
+        logger.error('Failed to fetch usage stats:', error)
         throw error
       }
     },

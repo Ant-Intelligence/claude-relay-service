@@ -1,5 +1,6 @@
 // API 配置
 import { APP_CONFIG, getLoginUrl } from './app'
+import logger from '@/utils/logger'
 
 // 开发环境使用 /webapi 前缀，生产环境不使用前缀
 export const API_PREFIX = APP_CONFIG.apiPrefix
@@ -126,7 +127,7 @@ class ApiClient {
       const response = await fetch(fullUrl, config)
       return await this.handleResponse(response)
     } catch (error) {
-      console.error('API GET Error:', error)
+      logger.error('API GET Error:', error)
       throw error
     }
   }
@@ -144,7 +145,7 @@ class ApiClient {
       const response = await fetch(fullUrl, config)
       return await this.handleResponse(response)
     } catch (error) {
-      console.error('API POST Error:', error)
+      logger.error('API POST Error:', error)
       throw error
     }
   }
@@ -162,7 +163,7 @@ class ApiClient {
       const response = await fetch(fullUrl, config)
       return await this.handleResponse(response)
     } catch (error) {
-      console.error('API PUT Error:', error)
+      logger.error('API PUT Error:', error)
       throw error
     }
   }
@@ -180,7 +181,7 @@ class ApiClient {
       const response = await fetch(fullUrl, config)
       return await this.handleResponse(response)
     } catch (error) {
-      console.error('API PATCH Error:', error)
+      logger.error('API PATCH Error:', error)
       throw error
     }
   }
@@ -200,7 +201,7 @@ class ApiClient {
       const response = await fetch(fullUrl, config)
       return await this.handleResponse(response)
     } catch (error) {
-      console.error('API DELETE Error:', error)
+      logger.error('API DELETE Error:', error)
       throw error
     }
   }

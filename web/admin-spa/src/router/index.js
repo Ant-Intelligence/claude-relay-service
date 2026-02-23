@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { APP_CONFIG } from '@/config/app'
+import logger from '@/utils/logger'
 
 // 路由懒加载
 const LoginView = () => import('@/views/LoginView.vue')
@@ -150,7 +151,7 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   const userStore = useUserStore()
 
-  console.log('路由导航:', {
+  logger.log('路由导航:', {
     to: to.path,
     from: from.path,
     fullPath: to.fullPath,

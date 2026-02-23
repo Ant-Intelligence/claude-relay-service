@@ -796,6 +796,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { showToast } from '@/utils/toast'
 import { useAccountsStore } from '@/stores/accounts'
+import logger from '@/utils/logger'
 
 const props = defineProps({
   platform: {
@@ -911,14 +912,14 @@ watch(authCode, (newValue) => {
           // 成功提取授权码
           authCode.value = code
           showToast('成功提取授权码！', 'success')
-          console.log('Successfully extracted authorization code from URL')
+          logger.log('Successfully extracted authorization code from URL')
         } else {
           // URL 中没有 code 参数
           showToast('URL 中未找到授权码参数，请检查链接是否正确', 'error')
         }
       } catch (error) {
         // URL 解析失败
-        console.error('Failed to parse URL:', error)
+        logger.error('Failed to parse URL:', error)
         showToast('链接格式错误，请检查是否为完整的 URL', 'error')
       }
     } else if (props.platform === 'gemini' || props.platform === 'openai') {

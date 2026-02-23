@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import router from '@/router'
 import { apiClient } from '@/config/api'
 import { useDashboardStore } from '@/stores/dashboard'
+import logger from '@/utils/logger'
 
 export const useAuthStore = defineStore('auth', () => {
   // 状态
@@ -112,7 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
         }
       }
     } catch (error) {
-      console.error('加载OEM设置失败:', error)
+      logger.error('加载OEM设置失败:', error)
     } finally {
       oemLoading.value = false
     }

@@ -341,6 +341,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
 import UserApiKeysManager from '@/components/user/UserApiKeysManager.vue'
 import UserUsageStats from '@/components/user/UserUsageStats.vue'
@@ -396,7 +397,7 @@ const loadUserProfile = async () => {
   try {
     userProfile.value = await userStore.getUserProfile()
   } catch (error) {
-    console.error('Failed to load user profile:', error)
+    logger.error('Failed to load user profile:', error)
     showToast('Failed to load user profile', 'error')
   }
 }
@@ -404,21 +405,21 @@ const loadUserProfile = async () => {
 const loadApiKeysStats = async () => {
   try {
     const allApiKeys = await userStore.getUserApiKeys(true) // Include deleted keys
-    console.log('All API Keys received:', allApiKeys)
+    logger.log('All API Keys received:', allApiKeys)
 
     const activeKeys = allApiKeys.filter(
       (key) => !(key.isDeleted === 'true' || key.deletedAt) && key.isActive
     )
     const deletedKeys = allApiKeys.filter((key) => key.isDeleted === 'true' || key.deletedAt)
 
-    console.log('Active keys:', activeKeys)
-    console.log('Deleted keys:', deletedKeys)
-    console.log('Active count:', activeKeys.length)
-    console.log('Deleted count:', deletedKeys.length)
+    logger.log('Active keys:', activeKeys)
+    logger.log('Deleted keys:', deletedKeys)
+    logger.log('Active count:', activeKeys.length)
+    logger.log('Deleted count:', deletedKeys.length)
 
     apiKeysStats.value = { active: activeKeys.length, deleted: deletedKeys.length }
   } catch (error) {
-    console.error('Failed to load API keys stats:', error)
+    logger.error('Failed to load API keys stats:', error)
     apiKeysStats.value = { active: 0, deleted: 0 }
   }
 }

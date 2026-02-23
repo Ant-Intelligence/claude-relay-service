@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiClient } from '@/config/api'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 
 // 模块级变量，确保在所有 store 实例间共享，不受响应式系统影响
 let _dashboardInitialized = false
@@ -12,7 +13,7 @@ let _loadDashboardDataPromise = null // 用于防止 loadDashboardData 重复调
 const DEBUG = import.meta.env.DEV
 function debugLog(...args) {
   if (DEBUG) {
-    console.log('[Dashboard]', ...args)
+    logger.log('[Dashboard]', ...args)
   }
 }
 
@@ -251,7 +252,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
           }
         }
       } catch (error) {
-        console.error('加载仪表板数据失败:', error)
+        logger.error('加载仪表板数据失败:', error)
       } finally {
         loading.value = false
         // 请求完成后清除 Promise，允许下次刷新
@@ -344,7 +345,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         trendData.value = response.data
       }
     } catch (error) {
-      console.error('加载使用趋势失败:', error)
+      logger.error('加载使用趋势失败:', error)
     }
   }
 
@@ -435,7 +436,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         dashboardModelStats.value = response.data
       }
     } catch (error) {
-      console.error('加载模型统计失败:', error)
+      logger.error('加载模型统计失败:', error)
     }
   }
 
@@ -537,7 +538,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         }
       }
     } catch (error) {
-      console.error('加载API Keys趋势失败:', error)
+      logger.error('加载API Keys趋势失败:', error)
     }
   }
 
@@ -628,7 +629,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         }
       }
     } catch (error) {
-      console.error('加载账号使用趋势失败:', error)
+      logger.error('加载账号使用趋势失败:', error)
     }
   }
 

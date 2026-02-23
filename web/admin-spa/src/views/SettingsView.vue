@@ -1216,6 +1216,7 @@ import { storeToRefs } from 'pinia'
 import { showToast } from '@/utils/toast'
 import { useSettingsStore } from '@/stores/settings'
 import { apiClient } from '@/config/api'
+import logger from '@/utils/logger'
 
 // 定义组件名称，用于keep-alive排除
 defineOptions({
@@ -1499,7 +1500,7 @@ const loadWebhookConfig = async () => {
     if (error.name === 'AbortError') return
     if (!isMounted.value) return
     showToast('获取webhook配置失败', 'error')
-    console.error(error)
+    logger.error(error)
   }
 }
 
@@ -1526,7 +1527,7 @@ const saveWebhookConfig = async () => {
     if (error.name === 'AbortError') return
     if (!isMounted.value) return
     showToast('保存配置失败', 'error')
-    console.error(error)
+    logger.error(error)
   }
 }
 
@@ -1662,7 +1663,7 @@ const savePlatform = async () => {
     if (error.name === 'AbortError') return
     if (!isMounted.value) return
     showToast(error.message || '操作失败', 'error')
-    console.error(error)
+    logger.error(error)
   } finally {
     if (isMounted.value) {
       savingPlatform.value = false
@@ -1724,7 +1725,7 @@ const deletePlatform = async (id) => {
     if (error.name === 'AbortError') return
     if (!isMounted.value) return
     showToast('删除失败', 'error')
-    console.error(error)
+    logger.error(error)
   }
 }
 
@@ -1748,7 +1749,7 @@ const togglePlatform = async (id) => {
     if (error.name === 'AbortError') return
     if (!isMounted.value) return
     showToast('操作失败', 'error')
-    console.error(error)
+    logger.error(error)
   }
 }
 
@@ -1798,7 +1799,7 @@ const testPlatform = async (platform) => {
     if (error.name === 'AbortError') return
     if (!isMounted.value) return
     showToast(error.error || error.message || '测试失败', 'error')
-    console.error(error)
+    logger.error(error)
   }
 }
 
@@ -1821,7 +1822,7 @@ const testPlatformForm = async () => {
     if (error.name === 'AbortError') return
     if (!isMounted.value) return
     showToast(error.error || error.message || '测试失败', 'error')
-    console.error(error)
+    logger.error(error)
   } finally {
     if (isMounted.value) {
       testingConnection.value = false
@@ -1850,7 +1851,7 @@ const sendTestNotification = async () => {
     const errorMessage =
       error?.response?.data?.message || error?.response?.data?.error || error?.message || '发送失败'
     showToast(errorMessage, 'error')
-    console.error(error)
+    logger.error(error)
   }
 }
 
@@ -2049,7 +2050,7 @@ const removeIcon = () => {
 
 // 处理图标加载错误
 const handleIconError = () => {
-  console.warn('Icon failed to load')
+  logger.warn('Icon failed to load')
 }
 
 // 格式化日期时间

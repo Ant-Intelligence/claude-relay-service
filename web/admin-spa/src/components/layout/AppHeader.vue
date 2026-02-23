@@ -273,6 +273,7 @@ import { showToast } from '@/utils/toast'
 import { apiClient } from '@/config/api'
 import LogoTitle from '@/components/common/LogoTitle.vue'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
+import logger from '@/utils/logger'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -350,7 +351,7 @@ const checkForUpdates = async () => {
       }
     }
   } catch (error) {
-    console.error('Error checking for updates:', error)
+    logger.error('Error checking for updates:', error)
 
     // 尝试从localStorage读取缓存的版本信息
     const cached = localStorage.getItem('versionInfo')

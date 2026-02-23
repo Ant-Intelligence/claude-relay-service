@@ -450,6 +450,7 @@ import { showToast } from '@/utils/toast'
 import { useApiKeysStore } from '@/stores/apiKeys'
 import { apiClient } from '@/config/api'
 import AccountSelector from '@/components/common/AccountSelector.vue'
+import logger from '@/utils/logger'
 
 const props = defineProps({
   selectedKeys: {
@@ -827,7 +828,7 @@ const batchUpdateApiKeys = async () => {
     }
   } catch (error) {
     showToast('批量编辑失败', 'error')
-    console.error('批量编辑 API Keys 失败:', error)
+    logger.error('批量编辑 API Keys 失败:', error)
   } finally {
     loading.value = false
   }

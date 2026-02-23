@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { apiClient } from '@/config/api'
+import logger from '@/utils/logger'
 
 export const useSettingsStore = defineStore('settings', () => {
   // 状态
@@ -32,7 +33,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
       return result
     } catch (error) {
-      console.error('Failed to load OEM settings:', error)
+      logger.error('Failed to load OEM settings:', error)
       throw error
     } finally {
       loading.value = false
@@ -53,7 +54,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
       return result
     } catch (error) {
-      console.error('Failed to save OEM settings:', error)
+      logger.error('Failed to save OEM settings:', error)
       throw error
     } finally {
       saving.value = false

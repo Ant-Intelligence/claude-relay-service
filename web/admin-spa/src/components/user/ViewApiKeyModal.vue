@@ -198,6 +198,7 @@
 <script setup>
 import { ref } from 'vue'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 
 defineProps({
   show: {
@@ -239,7 +240,7 @@ const copyToClipboard = async (text) => {
     await navigator.clipboard.writeText(text)
     showToast('Copied to clipboard!', 'success')
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
     showToast('Failed to copy to clipboard', 'error')
   }
 }

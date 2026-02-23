@@ -352,6 +352,7 @@
 import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 
 const userStore = useUserStore()
 
@@ -380,7 +381,7 @@ const loadUsageStats = async () => {
     usageStats.value = stats
     userApiKeys.value = apiKeys
   } catch (error) {
-    console.error('Failed to load usage stats:', error)
+    logger.error('Failed to load usage stats:', error)
     showToast('Failed to load usage statistics', 'error')
   } finally {
     loading.value = false

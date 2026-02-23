@@ -318,7 +318,13 @@ export default {
           'claude-opus-4-6',
           'claude-opus-4-6-20260205'
         ],
-        gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview']
+        gemini: [
+          'gemini-2.5-flash',
+          'gemini-2.5-pro',
+          'gemini-3-pro-preview',
+          'gemini-3-flash-preview',
+          'gemini-3.1-pro-preview'
+        ]
       }
       return models[this.platform] || models.claude
     },

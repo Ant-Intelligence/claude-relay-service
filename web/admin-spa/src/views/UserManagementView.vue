@@ -478,6 +478,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { apiClient } from '@/config/api'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 import { debounce } from 'lodash-es'
 import UserUsageStatsModal from '@/components/admin/UserUsageStatsModal.vue'
 import ChangeRoleModal from '@/components/admin/ChangeRoleModal.vue'
@@ -576,7 +577,7 @@ const loadUsers = async () => {
       userStats.value = statsResponse.stats
     }
   } catch (error) {
-    console.error('Failed to load users:', error)
+    logger.error('Failed to load users:', error)
     showToast('Failed to load users', 'error')
   } finally {
     loading.value = false
@@ -651,7 +652,7 @@ const handleConfirmAction = async () => {
       }
     }
   } catch (error) {
-    console.error(`Failed to ${action}:`, error)
+    logger.error(`Failed to ${action}:`, error)
     showToast(`Failed to ${action}`, 'error')
   } finally {
     showConfirmModal.value = false

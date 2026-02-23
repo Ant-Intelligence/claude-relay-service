@@ -151,6 +151,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
 
 const router = useRouter()
@@ -183,7 +184,7 @@ const handleLogin = async () => {
     showToast('Login successful!', 'success')
     router.push('/user-dashboard')
   } catch (err) {
-    console.error('Login error:', err)
+    logger.error('Login error:', err)
     error.value = err.response?.data?.message || err.message || 'Login failed'
   } finally {
     loading.value = false

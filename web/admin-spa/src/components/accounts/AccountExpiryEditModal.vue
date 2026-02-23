@@ -187,6 +187,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
+import logger from '@/utils/logger'
 
 const props = defineProps({
   show: {
@@ -315,13 +316,13 @@ const updateCustomExpiryPreview = () => {
 
       // 验证日期有效性
       if (isNaN(localDate.getTime())) {
-        console.error('Invalid date:', localForm.customExpireDate)
+        logger.error('Invalid date:', localForm.customExpireDate)
         return
       }
 
       localForm.expiresAt = localDate.toISOString()
     } catch (error) {
-      console.error('Failed to parse custom expire date:', error)
+      logger.error('Failed to parse custom expire date:', error)
     }
   }
 }

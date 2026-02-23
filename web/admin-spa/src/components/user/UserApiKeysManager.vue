@@ -250,6 +250,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 import CreateApiKeyModal from './CreateApiKeyModal.vue'
 import ViewApiKeyModal from './ViewApiKeyModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
@@ -305,7 +306,7 @@ const loadApiKeys = async () => {
   try {
     apiKeys.value = await userStore.getUserApiKeys(true) // Include deleted keys
   } catch (error) {
-    console.error('Failed to load API keys:', error)
+    logger.error('Failed to load API keys:', error)
     showToast('Failed to load API keys', 'error')
   } finally {
     loading.value = false
@@ -331,7 +332,7 @@ const handleDeleteConfirm = async () => {
       await loadApiKeys()
     }
   } catch (error) {
-    console.error('Failed to delete API key:', error)
+    logger.error('Failed to delete API key:', error)
     showToast('Failed to delete API key', 'error')
   } finally {
     showDeleteModal.value = false

@@ -174,6 +174,7 @@
 import { ref, reactive, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { showToast } from '@/utils/toast'
+import logger from '@/utils/logger'
 
 const props = defineProps({
   show: {
@@ -226,7 +227,7 @@ const handleSubmit = async () => {
       error.value = result.message || 'Failed to create API key'
     }
   } catch (err) {
-    console.error('Create API key error:', err)
+    logger.error('Create API key error:', err)
     error.value = err.response?.data?.message || err.message || 'Failed to create API key'
   } finally {
     loading.value = false
@@ -238,7 +239,7 @@ const copyToClipboard = async (text) => {
     await navigator.clipboard.writeText(text)
     showToast('API key copied to clipboard!', 'success')
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
     showToast('Failed to copy to clipboard', 'error')
   }
 }

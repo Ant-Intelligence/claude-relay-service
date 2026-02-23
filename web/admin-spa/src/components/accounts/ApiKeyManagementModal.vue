@@ -388,6 +388,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { showToast } from '@/utils/toast'
 import { apiClient } from '@/config/api'
+import logger from '@/utils/logger'
 
 const props = defineProps({
   accountId: {
@@ -485,7 +486,7 @@ const loadApiKeys = async () => {
       try {
         parsedKeys = JSON.parse(account.apiKeys)
       } catch (error) {
-        console.error('Failed to parse apiKeys:', error)
+        logger.error('Failed to parse apiKeys:', error)
       }
     }
 
@@ -538,7 +539,7 @@ const loadApiKeys = async () => {
       return (b.usageCount || 0) - (a.usageCount || 0)
     })
   } catch (error) {
-    console.error('Failed to load API keys:', error)
+    logger.error('Failed to load API keys:', error)
     showToast('加载 API Key 失败', 'error')
   } finally {
     loading.value = false
@@ -567,7 +568,7 @@ const deleteApiKey = async (apiKey) => {
     await loadApiKeys()
     emit('refresh')
   } catch (error) {
-    console.error('Failed to delete API key:', error)
+    logger.error('Failed to delete API key:', error)
     showToast(error.response?.data?.error || '删除 API Key 失败', 'error')
   } finally {
     deleting.value = null
@@ -604,7 +605,7 @@ const resetApiKeyStatus = async (apiKey) => {
     await loadApiKeys()
     emit('refresh')
   } catch (error) {
-    console.error('Failed to reset API key status:', error)
+    logger.error('Failed to reset API key status:', error)
     showToast(error.response?.data?.error || '重置 API Key 状态失败', 'error')
   } finally {
     resetting.value = null
@@ -637,7 +638,7 @@ const deleteAllErrorKeys = async () => {
     await loadApiKeys()
     emit('refresh')
   } catch (error) {
-    console.error('Failed to delete error API keys:', error)
+    logger.error('Failed to delete error API keys:', error)
     showToast(error.response?.data?.error || '批量删除失败', 'error')
   } finally {
     batchDeleting.value = false
@@ -678,7 +679,7 @@ const deleteAllKeys = async () => {
     await loadApiKeys()
     emit('refresh')
   } catch (error) {
-    console.error('Failed to delete all API keys:', error)
+    logger.error('Failed to delete all API keys:', error)
     showToast(error.response?.data?.error || '批量删除失败', 'error')
   } finally {
     batchDeleting.value = false
@@ -764,7 +765,7 @@ const copyApiKey = async (key) => {
     await writeToClipboard(key)
     showToast('API Key 已复制', 'success')
   } catch (error) {
-    console.error('Failed to copy:', error)
+    logger.error('Failed to copy:', error)
     showToast('复制失败，请手动复制', 'error')
   }
 }
@@ -781,7 +782,7 @@ const copyAllApiKeys = async () => {
     await writeToClipboard(allKeysText)
     showToast(`已复制 ${apiKeys.value.length} 条 API Key`, 'success')
   } catch (error) {
-    console.error('Failed to copy all keys:', error)
+    logger.error('Failed to copy all keys:', error)
     showToast('复制全部 API Key 失败，请手动复制', 'error')
   } finally {
     copyingAll.value = false

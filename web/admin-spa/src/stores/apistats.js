@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiStatsClient } from '@/config/apiStats'
+import logger from '@/utils/logger'
 
 export const useApiStatsStore = defineStore('apistats', () => {
   // 状态
@@ -139,7 +140,7 @@ export const useApiStatsStore = defineStore('apistats', () => {
         throw new Error(idResult.message || '获取 API Key ID 失败')
       }
     } catch (err) {
-      console.error('Query stats error:', err)
+      logger.error('Query stats error:', err)
       error.value = err.message || '查询统计数据失败，请检查您的 API Key 是否正确'
       statsData.value = null
       modelStats.value = []
@@ -198,10 +199,10 @@ export const useApiStatsStore = defineStore('apistats', () => {
           monthlyStats.value = summary
         }
       } else {
-        console.warn(`Failed to load ${period} stats:`, result.message)
+        logger.warn(`Failed to load ${period} stats:`, result.message)
       }
     } catch (err) {
-      console.error(`Load ${period} stats error:`, err)
+      logger.error(`Load ${period} stats error:`, err)
     }
   }
 
@@ -220,7 +221,7 @@ export const useApiStatsStore = defineStore('apistats', () => {
         throw new Error(result.message || '加载模型统计失败')
       }
     } catch (err) {
-      console.error('Load model stats error:', err)
+      logger.error('Load model stats error:', err)
       modelStats.value = []
     } finally {
       modelStatsLoading.value = false
@@ -269,10 +270,10 @@ export const useApiStatsStore = defineStore('apistats', () => {
         statsData.value = result.data
 
         // 调试：打印返回的限制数据
-        console.log('API Stats - Full response:', result.data)
-        console.log('API Stats - limits data:', result.data.limits)
-        console.log('API Stats - weeklyOpusCostLimit:', result.data.limits?.weeklyOpusCostLimit)
-        console.log('API Stats - weeklyOpusCost:', result.data.limits?.weeklyOpusCost)
+        logger.log('API Stats - Full response:', result.data)
+        logger.log('API Stats - limits data:', result.data.limits)
+        logger.log('API Stats - weeklyOpusCostLimit:', result.data.limits?.weeklyOpusCostLimit)
+        logger.log('API Stats - weeklyOpusCost:', result.data.limits?.weeklyOpusCost)
 
         // 同时加载今日和本月的统计数据
         await loadAllPeriodStats()
@@ -283,7 +284,7 @@ export const useApiStatsStore = defineStore('apistats', () => {
         throw new Error(result.message || '查询失败')
       }
     } catch (err) {
-      console.error('Load stats with apiId error:', err)
+      logger.error('Load stats with apiId error:', err)
       error.value = err.message || '查询统计数据失败'
       statsData.value = null
       modelStats.value = []
@@ -301,7 +302,7 @@ export const useApiStatsStore = defineStore('apistats', () => {
         oemSettings.value = { ...oemSettings.value, ...result.data }
       }
     } catch (err) {
-      console.error('Error loading OEM settings:', err)
+      logger.error('Error loading OEM settings:', err)
       // 失败时使用默认值
       oemSettings.value = {
         siteName: 'Claude Relay Service',
@@ -401,7 +402,7 @@ export const useApiStatsStore = defineStore('apistats', () => {
         throw new Error(batchResult.message || '批量查询失败')
       }
     } catch (err) {
-      console.error('Batch query error:', err)
+      logger.error('Batch query error:', err)
       error.value = err.message || '批量查询统计数据失败'
       aggregatedStats.value = null
       individualStats.value = []
@@ -425,7 +426,7 @@ export const useApiStatsStore = defineStore('apistats', () => {
         throw new Error(result.message || '加载批量模型统计失败')
       }
     } catch (err) {
-      console.error('Load batch model stats error:', err)
+      logger.error('Load batch model stats error:', err)
       modelStats.value = []
     } finally {
       modelStatsLoading.value = false

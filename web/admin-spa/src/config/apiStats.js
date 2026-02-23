@@ -1,5 +1,6 @@
 // API Stats 专用 API 客户端
 // 与管理员 API 隔离，不需要认证
+import logger from '@/utils/logger'
 
 class ApiStatsClient {
   constructor() {
@@ -31,7 +32,7 @@ class ApiStatsClient {
 
       return data
     } catch (error) {
-      console.error('API Stats request error:', error)
+      logger.error('API Stats request error:', error)
       throw error
     }
   }
@@ -65,7 +66,7 @@ class ApiStatsClient {
     try {
       return await this.request('/admin/oem-settings')
     } catch (error) {
-      console.error('Failed to load OEM settings:', error)
+      logger.error('Failed to load OEM settings:', error)
       return {
         success: true,
         data: {
