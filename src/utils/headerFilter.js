@@ -113,9 +113,29 @@ function filterForGemini(headers) {
   return filtered
 }
 
+// Beta tokens to strip from forwarded requests
+const CONTEXT_1M_BETA = 'context-1m-2025-08-07'
+
+/**
+ * Remove a single beta token from a comma-separated anthropic-beta header value.
+ * Returns the header unchanged if the token is not present.
+ */
+function stripBetaToken(header, token) {
+  if (!header || !header.includes(token)) {
+    return header
+  }
+  return header
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p && p !== token)
+    .join(',')
+}
+
 module.exports = {
   cdnHeaders,
   filterForOpenAI,
   filterForClaude,
-  filterForGemini
+  filterForGemini,
+  stripBetaToken,
+  CONTEXT_1M_BETA
 }

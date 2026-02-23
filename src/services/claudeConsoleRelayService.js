@@ -13,6 +13,7 @@ const modelAlertService = require('./modelAlertService')
 const { isValidClaudeModel } = require('../utils/modelValidator')
 const { createClaudeTestPayload, sendStreamTestRequest } = require('../utils/testPayloadHelper')
 const { isStreamWritable } = require('../utils/streamHelper')
+const { stripBetaToken, CONTEXT_1M_BETA } = require('../utils/headerFilter')
 
 class ClaudeConsoleRelayService {
   constructor() {
@@ -1055,6 +1056,16 @@ class ClaudeConsoleRelayService {
         filteredHeaders[key] = clientHeaders[key]
       }
     })
+
+    if (filteredHeaders['anthropic-beta']) {
+      filteredHeaders['anthropic-beta'] = stripBetaToken(
+        filteredHeaders['anthropic-beta'],
+        CONTEXT_1M_BETA
+      )
+      if (!filteredHeaders['anthropic-beta']) {
+        delete filteredHeaders['anthropic-beta']
+      }
+    }
 
     return filteredHeaders
   }

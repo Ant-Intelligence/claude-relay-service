@@ -3,7 +3,7 @@ const zlib = require('zlib')
 const fs = require('fs')
 const path = require('path')
 const ProxyHelper = require('../utils/proxyHelper')
-const { filterForClaude } = require('../utils/headerFilter')
+const { filterForClaude, CONTEXT_1M_BETA } = require('../utils/headerFilter')
 const claudeAccountService = require('./claudeAccountService')
 const unifiedClaudeScheduler = require('./unifiedClaudeScheduler')
 const sessionHelper = require('../utils/sessionHelper')
@@ -55,7 +55,7 @@ class ClaudeRelayService {
       clientBetaHeader
         .split(',')
         .map((p) => p.trim())
-        .filter(Boolean)
+        .filter((p) => Boolean(p) && p !== CONTEXT_1M_BETA)
         .forEach(addBeta)
     }
 

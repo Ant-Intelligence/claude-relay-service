@@ -3,6 +3,7 @@ const ccrAccountService = require('./ccrAccountService')
 const logger = require('../utils/logger')
 const config = require('../../config/config')
 const { parseVendorPrefixedModel } = require('../utils/modelHelper')
+const { stripBetaToken, CONTEXT_1M_BETA } = require('../utils/headerFilter')
 
 class CcrRelayService {
   constructor() {
@@ -630,6 +631,16 @@ class CcrRelayService {
       const lowerKey = key.toLowerCase()
       if (allowedHeaders.includes(lowerKey)) {
         filteredHeaders[key] = value
+      }
+    }
+
+    if (filteredHeaders['anthropic-beta']) {
+      filteredHeaders['anthropic-beta'] = stripBetaToken(
+        filteredHeaders['anthropic-beta'],
+        CONTEXT_1M_BETA
+      )
+      if (!filteredHeaders['anthropic-beta']) {
+        delete filteredHeaders['anthropic-beta']
       }
     }
 
