@@ -6,7 +6,7 @@ const apiKeyService = require('./apiKeyService')
 
 // Gemini API 配置
 const GEMINI_API_BASE = 'https://cloudcode.googleapis.com/v1'
-const DEFAULT_MODEL = 'models/gemini-2.0-flash-exp'
+const DEFAULT_MODEL = 'models/gemini-2.5-flash'
 
 // 创建代理 agent（使用统一的代理工具）
 function createProxyAgent(proxyConfig) {
@@ -417,7 +417,7 @@ async function getAvailableModels(accessToken, proxy, projectId, location = 'us-
     // 返回默认模型列表
     return [
       {
-        id: 'gemini-2.0-flash-exp',
+        id: 'gemini-2.5-flash',
         object: 'model',
         created: Date.now() / 1000,
         owned_by: 'google'
@@ -445,10 +445,10 @@ function getModelsGoogleFormat() {
         topK: 40
       },
       {
-        name: 'models/gemini-3-pro-image-preview',
+        name: 'models/gemini-3.1-pro-preview',
         version: '001',
-        displayName: 'Gemini 3 Pro Image Preview',
-        description: 'Gemini 3 Pro preview model with image generation capabilities',
+        displayName: 'Gemini 3.1 Pro Preview',
+        description: 'Gemini 3.1 Pro preview model',
         inputTokenLimit: 2097152,
         outputTokenLimit: 65536,
         supportedGenerationMethods: ['generateContent', 'streamGenerateContent', 'countTokens'],

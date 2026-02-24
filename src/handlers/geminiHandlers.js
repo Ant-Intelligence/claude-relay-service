@@ -1848,7 +1848,7 @@ async function handleStandardGenerateContent(req, res) {
     }
 
     // 从路径参数中获取模型名
-    const model = req.params.modelName || 'gemini-2.0-flash-exp'
+    const model = req.params.modelName || 'gemini-2.5-flash'
     sessionHash = sessionHelper.generateSessionHash(req.body)
 
     // 标准 Gemini API 请求体直接包含 contents 等字段
@@ -2119,7 +2119,7 @@ async function handleStandardStreamGenerateContent(req, res) {
     }
 
     // 从路径参数中获取模型名
-    const model = req.params.modelName || 'gemini-2.0-flash-exp'
+    const model = req.params.modelName || 'gemini-2.5-flash'
     sessionHash = sessionHelper.generateSessionHash(req.body)
 
     // 标准 Gemini API 请求体直接包含 contents 等字段

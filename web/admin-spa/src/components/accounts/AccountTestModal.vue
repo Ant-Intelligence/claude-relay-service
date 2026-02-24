@@ -241,8 +241,9 @@ const commonTestModels = computed(() => {
     return [
       { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
       { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
+      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+      { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro' },
+      { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' }
     ]
   }
   return [
