@@ -280,6 +280,7 @@ class UnifiedClaudeScheduler {
       // CCR 账户不支持绑定（仅通过 ccr, 前缀进行 CCR 路由）
 
       // 如果有会话哈希，检查是否有已映射的账户
+      let previousAccountType = null // 记录失效会话的原账户类型，用于同类优先选择
       if (sessionHash) {
         const mappedAccount = await this._getSessionMapping(sessionHash)
         if (mappedAccount) {
@@ -307,6 +308,7 @@ class UnifiedClaudeScheduler {
               logger.warn(
                 `⚠️ Mapped account ${mappedAccount.accountId} is no longer available, selecting new account`
               )
+              previousAccountType = mappedAccount.accountType
               await this._deleteSessionMapping(sessionHash)
             }
           }
@@ -331,8 +333,8 @@ class UnifiedClaudeScheduler {
         }
       }
 
-      // 按优先级和最后使用时间排序
-      const sortedAccounts = this._sortAccountsByPriority(availableAccounts)
+      // 按优先级和最后使用时间排序，会话切换时同类账户优先
+      const sortedAccounts = this._sortAccountsByPriority(availableAccounts, previousAccountType)
 
       // 选择第一个账户
       const selectedAccount = sortedAccounts[0]
@@ -855,9 +857,24 @@ class UnifiedClaudeScheduler {
   }
 
   // 🔢 按优先级和最后使用时间排序账户
-  _sortAccountsByPriority(accounts) {
+  /**
+   * @param {Array} accounts - 可用账户列表
+   * @param {string|null} preferAccountType - 会话切换时优先选择的账户类型
+   *   claude-official 会话不兼容 console，所以 official 失效时优先选同类；
+   *   claude-console 会话兼容 official，无需特殊处理。
+   */
+  _sortAccountsByPriority(accounts, preferAccountType = null) {
     return accounts.sort((a, b) => {
-      // 首先按优先级排序（数字越小优先级越高）
+      // 会话切换时，同类账户在同优先级内优先（仅 claude-official 需要）
+      if (preferAccountType === 'claude-official') {
+        const aMatch = a.accountType === preferAccountType ? 0 : 1
+        const bMatch = b.accountType === preferAccountType ? 0 : 1
+        if (aMatch !== bMatch) {
+          return aMatch - bMatch
+        }
+      }
+
+      // 按优先级排序（数字越小优先级越高）
       if (a.priority !== b.priority) {
         return a.priority - b.priority
       }
