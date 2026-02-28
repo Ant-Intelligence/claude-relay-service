@@ -919,6 +919,14 @@ class UnifiedClaudeScheduler {
           }
         }
 
+        // 检查是否被标记为临时不可用（网络错误熔断）
+        const tempUnavailableKey = `temp_unavailable:${accountId}`
+        const isTempUnavailable = await redis.getClientSafe().get(tempUnavailableKey)
+        if (isTempUnavailable) {
+          logger.info(`⏱️ Account ${accountId} is temporarily unavailable (session check)`)
+          return false
+        }
+
         return true
       } else if (accountType === 'claude-console') {
         const account = await claudeConsoleAccountService.getAccount(accountId)
@@ -989,6 +997,16 @@ class UnifiedClaudeScheduler {
             )
             return false
           }
+        }
+
+        // 检查是否被标记为临时不可用（网络错误熔断）
+        const consoleTempUnavailableKey = `temp_unavailable:${accountId}`
+        const isConsoleTempUnavailable = await redis.getClientSafe().get(consoleTempUnavailableKey)
+        if (isConsoleTempUnavailable) {
+          logger.info(
+            `⏱️ Claude Console account ${accountId} is temporarily unavailable (session check)`
+          )
+          return false
         }
 
         return true
@@ -1289,6 +1307,32 @@ class UnifiedClaudeScheduler {
       return { success: true }
     } catch (error) {
       logger.error(`❌ Failed to mark account as blocked: ${accountId} (${accountType})`, error)
+      throw error
+    }
+  }
+
+  // ⏱️ 标记账户为临时不可用（轻量级熔断，TTL自动恢复）
+  async markAccountTemporarilyUnavailable(
+    accountId,
+    accountType,
+    _sessionHash = null,
+    ttlSeconds = 300
+  ) {
+    try {
+      const client = redis.getClientSafe()
+      const key = `temp_unavailable:${accountId}`
+      await client.set(key, Date.now().toString(), 'EX', ttlSeconds)
+
+      logger.warn(
+        `⏱️ Account ${accountId} (${accountType}) marked temporarily unavailable for ${ttlSeconds}s`
+      )
+
+      return { success: true }
+    } catch (error) {
+      logger.error(
+        `❌ Failed to mark account temporarily unavailable: ${accountId} (${accountType})`,
+        error
+      )
       throw error
     }
   }

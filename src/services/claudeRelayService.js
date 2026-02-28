@@ -570,7 +570,8 @@ class ClaudeRelayService {
             },
             {
               ...requestOptions,
-              isRealClaudeCodeRequest
+              isRealClaudeCodeRequest,
+              sessionHash
             }
           )
 
@@ -1391,6 +1392,7 @@ class ClaudeRelayService {
     requestOptions = {}
   ) {
     const url = new URL(this.claudeApiUrl)
+    const { sessionHash } = requestOptions
 
     // 获取账户信息用于统一 User-Agent
     const account = await claudeAccountService.getAccount(accountId)
@@ -1509,7 +1511,7 @@ class ClaudeRelayService {
         } else if (error.code === 'ETIMEDOUT') {
           errorMessage = 'Connection timed out to Claude API server'
 
-          await this._handleServerError(accountId, 504, null, 'Network')
+          await this._handleServerError(accountId, 504, sessionHash, 'Network')
         }
 
         reject(new Error(errorMessage))
@@ -1519,7 +1521,7 @@ class ClaudeRelayService {
         req.destroy()
         logger.error(`❌ Claude API request timeout (Account: ${accountId})`)
 
-        await this._handleServerError(accountId, 504, null, 'Request')
+        await this._handleServerError(accountId, 504, sessionHash, 'Request')
 
         reject(new Error('Request timeout'))
       })
@@ -2508,6 +2510,9 @@ class ClaudeRelayService {
           statusCode = 504
         }
 
+        // 标记账户临时不可用
+        await this._handleServerError(accountId, statusCode, sessionHash, '[Stream] Network')
+
         if (!responseStream.headersSent) {
           const existingConnection = responseStream.getHeader
             ? responseStream.getHeader('Connection')
@@ -2537,6 +2542,9 @@ class ClaudeRelayService {
       req.on('timeout', async () => {
         req.destroy()
         logger.error(`❌ Claude stream request timeout | Account: ${account?.name || accountId}`)
+
+        // 标记账户临时不可用
+        await this._handleServerError(accountId, 504, sessionHash, '[Stream] Request')
 
         if (!responseStream.headersSent) {
           const existingConnection = responseStream.getHeader
@@ -2616,6 +2624,18 @@ class ClaudeRelayService {
         logger.error(
           `❌ ${prefix}Account ${accountId} exceeded ${errorTypeLabel} error threshold (${errorCount} errors), please investigate upstream stability`
         )
+
+        // 连续错误超过阈值时，清除粘性会话让下次请求重新选择账户
+        if (sessionHash) {
+          try {
+            await unifiedClaudeScheduler.clearSessionMapping(sessionHash)
+            logger.warn(
+              `🧹 ${prefix}Cleared sticky session for account ${accountId} after ${errorCount} consecutive errors`
+            )
+          } catch (clearError) {
+            logger.error(`❌ Failed to clear session mapping: ${clearError.message}`)
+          }
+        }
       }
     } catch (handlingError) {
       logger.error(`❌ Failed to handle ${context} server error:`, handlingError)
