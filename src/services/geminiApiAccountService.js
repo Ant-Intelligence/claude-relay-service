@@ -4,6 +4,7 @@ const redis = require('../models/redis')
 const logger = require('../utils/logger')
 const config = require('../../config/config')
 const LRUCache = require('../utils/lruCache')
+const ProxyHelper = require('../utils/proxyHelper')
 
 class GeminiApiAccountService {
   constructor() {
@@ -496,6 +497,80 @@ class GeminiApiAccountService {
     }
 
     return { success: true, message: 'Account status reset successfully' }
+  }
+
+  // 测试账户连通性
+  async testAccount(accountId, model) {
+    const axios = require('axios')
+    const startTime = Date.now()
+
+    try {
+      const account = await this.getAccount(accountId)
+      if (!account) {
+        return { success: false, error: 'Account not found' }
+      }
+
+      if (!account.apiKey) {
+        return { success: false, error: 'No API key available' }
+      }
+
+      const modelName = model || 'gemini-2.5-flash'
+      const baseUrl = account.baseUrl || 'https://generativelanguage.googleapis.com'
+
+      const requestBody = {
+        contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+        generationConfig: { maxOutputTokens: 100 }
+      }
+
+      const apiUrl = `${baseUrl}/v1beta/models/${modelName}:generateContent?key=${account.apiKey}`
+
+      const axiosConfig = {
+        method: 'POST',
+        url: apiUrl,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: requestBody,
+        timeout: 30000
+      }
+
+      // 添加代理配置
+      const proxyAgent = ProxyHelper.createProxyAgent(account.proxy)
+      if (proxyAgent) {
+        axiosConfig.httpsAgent = proxyAgent
+        axiosConfig.httpAgent = proxyAgent
+        axiosConfig.proxy = false
+        logger.info(
+          `🌐 Using proxy for Gemini-API testAccount: ${ProxyHelper.getProxyDescription(account.proxy)}`
+        )
+      }
+
+      const response = await axios(axiosConfig)
+      const duration = Date.now() - startTime
+
+      const responseText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const usageMetadata = response.data?.usageMetadata || {}
+
+      logger.info(`✅ Gemini-API account test successful for ${accountId}, duration: ${duration}ms`)
+
+      return {
+        success: true,
+        responseText,
+        usage: {
+          promptTokenCount: usageMetadata.promptTokenCount || 0,
+          candidatesTokenCount: usageMetadata.candidatesTokenCount || 0
+        },
+        duration
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime
+      const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error'
+      logger.error(`❌ Gemini-API account test failed for ${accountId}:`, {
+        error: errorMessage,
+        status: error.response?.status
+      })
+      return { success: false, error: errorMessage, duration }
+    }
   }
 
   // API Key 不会过期

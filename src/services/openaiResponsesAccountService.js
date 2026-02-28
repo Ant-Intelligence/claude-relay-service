@@ -4,6 +4,7 @@ const redis = require('../models/redis')
 const logger = require('../utils/logger')
 const config = require('../../config/config')
 const LRUCache = require('../utils/lruCache')
+const ProxyHelper = require('../utils/proxyHelper')
 
 class OpenAIResponsesAccountService {
   constructor() {
@@ -524,6 +525,92 @@ class OpenAIResponsesAccountService {
     }
 
     return { success: true, message: 'Account status reset successfully' }
+  }
+
+  // 测试账户连通性
+  async testAccount(accountId, model) {
+    const axios = require('axios')
+    const startTime = Date.now()
+
+    try {
+      const account = await this.getAccount(accountId)
+      if (!account) {
+        return { success: false, error: 'Account not found' }
+      }
+
+      if (!account.apiKey) {
+        return { success: false, error: 'No API key available' }
+      }
+
+      if (!account.baseApi) {
+        return { success: false, error: 'No base API URL configured' }
+      }
+
+      const modelName = model || 'gpt-5.1-codex-mini'
+      const apiUrl = `${account.baseApi}/v1/chat/completions`
+
+      const headers = {
+        Authorization: `Bearer ${account.apiKey}`,
+        'Content-Type': 'application/json'
+      }
+
+      if (account.userAgent) {
+        headers['User-Agent'] = account.userAgent
+      }
+
+      const requestBody = {
+        model: modelName,
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 100
+      }
+
+      const axiosConfig = {
+        method: 'POST',
+        url: apiUrl,
+        headers,
+        data: requestBody,
+        timeout: 30000
+      }
+
+      // 添加代理配置
+      const proxyAgent = ProxyHelper.createProxyAgent(account.proxy)
+      if (proxyAgent) {
+        axiosConfig.httpsAgent = proxyAgent
+        axiosConfig.httpAgent = proxyAgent
+        axiosConfig.proxy = false
+        logger.info(
+          `🌐 Using proxy for OpenAI-Responses testAccount: ${ProxyHelper.getProxyDescription(account.proxy)}`
+        )
+      }
+
+      const response = await axios(axiosConfig)
+      const duration = Date.now() - startTime
+
+      const responseText = response.data?.choices?.[0]?.message?.content || ''
+      const usage = response.data?.usage || {}
+
+      logger.info(
+        `✅ OpenAI-Responses account test successful for ${accountId}, duration: ${duration}ms`
+      )
+
+      return {
+        success: true,
+        responseText,
+        usage: {
+          prompt_tokens: usage.prompt_tokens || 0,
+          completion_tokens: usage.completion_tokens || 0
+        },
+        duration
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime
+      const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error'
+      logger.error(`❌ OpenAI-Responses account test failed for ${accountId}:`, {
+        error: errorMessage,
+        status: error.response?.status
+      })
+      return { success: false, error: errorMessage, duration }
+    }
   }
 
   // ⏰ 检查账户订阅是否已过期

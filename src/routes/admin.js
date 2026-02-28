@@ -10029,6 +10029,38 @@ router.post('/openai-responses-accounts/:id/reset-usage', authenticateAdmin, asy
   }
 })
 
+// 测试 OpenAI-Responses 账户连通性
+router.post('/openai-responses-accounts/:accountId/test', authenticateAdmin, async (req, res) => {
+  const { accountId } = req.params
+  const { model } = req.body
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+
+  try {
+    res.write(`data: ${JSON.stringify({ type: 'test_start' })}\n\n`)
+    const result = await openaiResponsesAccountService.testAccount(accountId, model)
+
+    if (result.success) {
+      res.write(`data: ${JSON.stringify({ type: 'content', text: result.responseText })}\n\n`)
+      res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({ type: 'test_complete', success: true, usage: result.usage, duration: result.duration })}\n\n`
+      )
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: result.error })}\n\n`)
+    }
+  } catch (error) {
+    logger.error(`❌ Failed to test OpenAI-Responses account:`, error)
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`)
+  }
+
+  res.end()
+})
+
 // 🤖 Droid 账户管理
 
 // 生成 Droid OAuth 授权链接
@@ -10933,6 +10965,39 @@ router.post('/gemini-api-accounts/:id/reset-status', authenticateAdmin, async (r
     logger.error('❌ Failed to reset Gemini-API account status:', error)
     return res.status(500).json({ error: 'Failed to reset status', message: error.message })
   }
+})
+
+// 测试 Gemini-API 账户连通性
+router.post('/gemini-api-accounts/:accountId/test', authenticateAdmin, async (req, res) => {
+  const { accountId } = req.params
+  const { model } = req.body
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+
+  try {
+    const geminiApiAccountService = require('../services/geminiApiAccountService')
+    res.write(`data: ${JSON.stringify({ type: 'test_start' })}\n\n`)
+    const result = await geminiApiAccountService.testAccount(accountId, model)
+
+    if (result.success) {
+      res.write(`data: ${JSON.stringify({ type: 'content', text: result.responseText })}\n\n`)
+      res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({ type: 'test_complete', success: true, usage: result.usage, duration: result.duration })}\n\n`
+      )
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: result.error })}\n\n`)
+    }
+  } catch (error) {
+    logger.error(`❌ Failed to test Gemini-API account:`, error)
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`)
+  }
+
+  res.end()
 })
 
 // ============================================================================

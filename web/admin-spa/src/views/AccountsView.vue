@@ -3994,7 +3994,9 @@ const canTestAccount = (account) => {
   return (
     account.platform === 'claude' ||
     account.platform === 'claude-console' ||
-    account.platform === 'gemini'
+    account.platform === 'gemini' ||
+    account.platform === 'gemini-api' ||
+    account.platform === 'openai-responses'
   )
 }
 

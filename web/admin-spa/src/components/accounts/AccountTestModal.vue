@@ -237,13 +237,22 @@ const commonTestModels = computed(() => {
       { value: 'us.anthropic.claude-opus-4-6-20260205-v1:0', label: 'Claude Opus 4.6' }
     ]
   }
-  if (props.account?.platform === 'gemini') {
+  if (props.account?.platform === 'gemini' || props.account?.platform === 'gemini-api') {
     return [
       { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
       { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
       { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
       { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro' },
       { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' }
+    ]
+  }
+  if (props.account?.platform === 'openai-responses') {
+    return [
+      { value: 'gpt-5.1-codex-mini', label: 'GPT 5.1 Codex Mini' },
+      { value: 'gpt-5.3-codex', label: 'GPT 5.3 Codex' },
+      { value: 'gpt-5.2-codex', label: 'GPT 5.2 Codex' },
+      { value: 'gpt-5.1-codex-max', label: 'GPT 5.1 Codex Max' },
+      { value: 'gpt-5.2', label: 'GPT 5.2' }
     ]
   }
   return [
@@ -262,6 +271,8 @@ const platformLabel = computed(() => {
   if (platform === 'claude') return 'Claude OAuth'
   if (platform === 'claude-console') return 'Claude Console'
   if (platform === 'bedrock') return 'AWS Bedrock'
+  if (platform === 'gemini-api') return 'Gemini API'
+  if (platform === 'openai-responses') return 'OpenAI Responses'
   return platform
 })
 
@@ -270,6 +281,7 @@ const platformIcon = computed(() => {
   const platform = props.account.platform
   if (platform === 'claude' || platform === 'claude-console' || platform === 'bedrock')
     return 'fas fa-brain'
+  if (platform === 'gemini-api' || platform === 'openai-responses') return 'fas fa-key'
   return 'fas fa-robot'
 })
 
@@ -284,6 +296,12 @@ const platformBadgeClass = computed(() => {
   }
   if (platform === 'bedrock') {
     return 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300'
+  }
+  if (platform === 'gemini-api') {
+    return 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
+  }
+  if (platform === 'openai-responses') {
+    return 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'
   }
   return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
 })
@@ -339,15 +357,19 @@ const statusDescription = computed(() => {
       return '点击下方按钮开始测试账户连通性'
     case 'testing':
       return '正在发送测试请求并等待响应'
-    case 'success':
-      return props.account?.platform === 'gemini'
-        ? '账户可以正常访问 Gemini API'
-        : '账户可以正常访问 Claude API'
-    case 'error':
-      return (
-        errorMessage.value ||
-        (props.account?.platform === 'gemini' ? '无法连接到 Gemini API' : '无法连接到 Claude API')
-      )
+    case 'success': {
+      const p = props.account?.platform
+      if (p === 'gemini' || p === 'gemini-api') return '账户可以正常访问 Gemini API'
+      if (p === 'openai-responses') return '账户可以正常访问 OpenAI API'
+      return '账户可以正常访问 Claude API'
+    }
+    case 'error': {
+      if (errorMessage.value) return errorMessage.value
+      const pl = props.account?.platform
+      if (pl === 'gemini' || pl === 'gemini-api') return '无法连接到 Gemini API'
+      if (pl === 'openai-responses') return '无法连接到 OpenAI API'
+      return '无法连接到 Claude API'
+    }
     default:
       return ''
   }
@@ -443,6 +465,12 @@ function getTestEndpoint() {
   }
   if (platform === 'gemini') {
     return `${API_PREFIX}/admin/gemini-accounts/${props.account.id}/test`
+  }
+  if (platform === 'gemini-api') {
+    return `${API_PREFIX}/admin/gemini-api-accounts/${props.account.id}/test`
+  }
+  if (platform === 'openai-responses') {
+    return `${API_PREFIX}/admin/openai-responses-accounts/${props.account.id}/test`
   }
   return ''
 }
@@ -577,11 +605,13 @@ watch(
       errorMessage.value = ''
       testDuration.value = 0
 
-      // 根据平台设置默认测试模型（默认使用Haiku，更快更便宜）
+      // 根据平台设置默认测试模型（默认使用最小/最便宜的模型）
       if (props.account?.platform === 'bedrock') {
         testModel.value = 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
-      } else if (props.account?.platform === 'gemini') {
+      } else if (props.account?.platform === 'gemini' || props.account?.platform === 'gemini-api') {
         testModel.value = 'gemini-2.5-flash'
+      } else if (props.account?.platform === 'openai-responses') {
+        testModel.value = 'gpt-5.1-codex-mini'
       } else {
         testModel.value = 'claude-haiku-4-5-20251001'
       }
