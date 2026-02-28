@@ -5626,8 +5626,8 @@ router.get('/accounts/:accountId/usage-history', authenticateAdmin, async (req, 
       'claude-console': 'claude-3-5-sonnet-20241022',
       openai: 'gpt-4o-mini-2024-07-18',
       'openai-responses': 'gpt-4o-mini-2024-07-18',
-      gemini: 'gemini-1.5-flash',
-      'gemini-api': 'gemini-2.0-flash',
+      gemini: 'gemini-2.5-flash',
+      'gemini-api': 'gemini-2.5-flash',
       droid: 'unknown'
     }
 
@@ -7068,7 +7068,7 @@ router.get('/account-usage-trend', authenticateAdmin, async (req, res) => {
     const fallbackModelByGroup = {
       claude: 'claude-3-5-sonnet-20241022',
       openai: 'gpt-4o-mini-2024-07-18',
-      gemini: 'gemini-1.5-flash'
+      gemini: 'gemini-2.5-flash'
     }
     const fallbackModel = fallbackModelByGroup[group] || 'unknown'
 

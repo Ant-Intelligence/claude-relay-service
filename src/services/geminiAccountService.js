@@ -1673,7 +1673,8 @@ async function updateTempProjectId(accountId, tempProjectId) {
 // 测试账户连通性（发送真实 API 请求）
 async function testAccount(accountId, model) {
   const axios = require('axios')
-  const GEMINI_API_BASE = 'https://cloudcode.googleapis.com/v1'
+  const CODE_ASSIST_ENDPOINT = 'https://cloudcode-pa.googleapis.com'
+  const CODE_ASSIST_API_VERSION = 'v1internal'
 
   const startTime = Date.now()
 
@@ -1697,26 +1698,25 @@ async function testAccount(accountId, model) {
       return { success: false, error: 'No access token available' }
     }
 
-    // 确保模型名称格式正确
-    let modelName = model || 'gemini-2.0-flash'
-    if (!modelName.startsWith('models/')) {
-      modelName = `models/${modelName}`
-    }
+    const modelName = model || 'gemini-2.5-flash'
 
-    // 构造测试请求体
-    const requestBody = {
-      contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-      generationConfig: { maxOutputTokens: 100 }
-    }
-
-    // 构建 API URL（如有 projectId 使用项目特定格式）
+    // 获取 projectId
     const projectId = account.projectId || account.tempProjectId
-    let apiUrl
-    if (projectId) {
-      apiUrl = `${GEMINI_API_BASE}/projects/${projectId}/locations/us-central1/${modelName}:generateContent`
-    } else {
-      apiUrl = `${GEMINI_API_BASE}/${modelName}:generateContent`
+
+    // 使用与正式请求一致的 cloudcode-pa v1internal 格式
+    const requestBody = {
+      model: modelName,
+      request: {
+        contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+        generationConfig: { maxOutputTokens: 100 }
+      }
     }
+
+    if (projectId) {
+      requestBody.project = projectId
+    }
+
+    const apiUrl = `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:generateContent`
 
     const axiosConfig = {
       method: 'POST',
@@ -1745,7 +1745,7 @@ async function testAccount(accountId, model) {
     const response = await axios(axiosConfig)
     const duration = Date.now() - startTime
 
-    const responseData = response.data
+    const responseData = response.data?.response || response.data
     const responseText = responseData?.candidates?.[0]?.content?.parts?.[0]?.text || ''
     const usageMetadata = responseData?.usageMetadata || {}
 
