@@ -316,11 +316,27 @@ class UnifiedClaudeScheduler {
       }
 
       // 获取所有可用账户（传递请求的模型进行过滤）
-      const availableAccounts = await this._getAllAvailableAccounts(
+      let availableAccounts = await this._getAllAvailableAccounts(
         apiKeyData,
         effectiveModel,
         false // 仅前缀才走 CCR：默认池不包含 CCR 账户
       )
+
+      // claude-official 会话不兼容 console 账户，失效后只允许切换到同类账户
+      if (previousAccountType === 'claude-official') {
+        const sameTypeAccounts = availableAccounts.filter(
+          (a) => a.accountType === 'claude-official'
+        )
+        if (sameTypeAccounts.length === 0) {
+          throw new Error(
+            'No available Claude Official accounts to replace the failed session (Console accounts are not session-compatible)'
+          )
+        }
+        availableAccounts = sameTypeAccounts
+        logger.info(
+          `🔒 Session was claude-official, filtered to ${sameTypeAccounts.length} same-type account(s)`
+        )
+      }
 
       if (availableAccounts.length === 0) {
         // 提供更详细的错误信息
@@ -333,8 +349,8 @@ class UnifiedClaudeScheduler {
         }
       }
 
-      // 按优先级和最后使用时间排序，会话切换时同类账户优先
-      const sortedAccounts = this._sortAccountsByPriority(availableAccounts, previousAccountType)
+      // 按优先级和最后使用时间排序
+      const sortedAccounts = this._sortAccountsByPriority(availableAccounts)
 
       // 选择第一个账户
       const selectedAccount = sortedAccounts[0]
@@ -857,24 +873,9 @@ class UnifiedClaudeScheduler {
   }
 
   // 🔢 按优先级和最后使用时间排序账户
-  /**
-   * @param {Array} accounts - 可用账户列表
-   * @param {string|null} preferAccountType - 会话切换时优先选择的账户类型
-   *   claude-official 会话不兼容 console，所以 official 失效时优先选同类；
-   *   claude-console 会话兼容 official，无需特殊处理。
-   */
-  _sortAccountsByPriority(accounts, preferAccountType = null) {
+  _sortAccountsByPriority(accounts) {
     return accounts.sort((a, b) => {
-      // 会话切换时，同类账户在同优先级内优先（仅 claude-official 需要）
-      if (preferAccountType === 'claude-official') {
-        const aMatch = a.accountType === preferAccountType ? 0 : 1
-        const bMatch = b.accountType === preferAccountType ? 0 : 1
-        if (aMatch !== bMatch) {
-          return aMatch - bMatch
-        }
-      }
-
-      // 按优先级排序（数字越小优先级越高）
+      // 首先按优先级排序（数字越小优先级越高）
       if (a.priority !== b.priority) {
         return a.priority - b.priority
       }
