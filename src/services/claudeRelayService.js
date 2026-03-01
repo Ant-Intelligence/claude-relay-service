@@ -2186,69 +2186,106 @@ class ClaudeRelayService {
                   const data = JSON.parse(jsonStr)
 
                   // 收集来自不同事件的usage数据
-                  if (data.type === 'message_start' && data.message && data.message.usage) {
-                    // 新的消息开始，如果之前有数据，先保存
-                    if (
-                      currentUsageData.input_tokens !== undefined &&
-                      currentUsageData.output_tokens !== undefined
-                    ) {
-                      allUsageData.push({ ...currentUsageData })
-                      currentUsageData = {}
+                  if (data.type === 'message_start' && data.message) {
+                    // 始终提取模型信息（即使没有usage字段，extended thinking时message_start可能无usage）
+                    if (data.message.model) {
+                      currentUsageData.model = data.message.model
                     }
 
-                    // message_start包含input tokens、cache tokens和模型信息
-                    currentUsageData.input_tokens = data.message.usage.input_tokens || 0
-                    currentUsageData.cache_creation_input_tokens =
-                      data.message.usage.cache_creation_input_tokens || 0
-                    currentUsageData.cache_read_input_tokens =
-                      data.message.usage.cache_read_input_tokens || 0
-                    currentUsageData.model = data.message.model
+                    if (data.message.usage) {
+                      // 新的消息开始，如果之前有完整数据，先保存
+                      if (
+                        currentUsageData.input_tokens !== undefined &&
+                        currentUsageData.output_tokens !== undefined
+                      ) {
+                        allUsageData.push({ ...currentUsageData })
+                        currentUsageData = { model: currentUsageData.model }
+                      }
+
+                      // message_start包含input tokens、cache tokens
+                      currentUsageData.input_tokens = data.message.usage.input_tokens || 0
+                      currentUsageData.cache_creation_input_tokens =
+                        data.message.usage.cache_creation_input_tokens || 0
+                      currentUsageData.cache_read_input_tokens =
+                        data.message.usage.cache_read_input_tokens || 0
+
+                      // 检查是否有详细的 cache_creation 对象
+                      if (
+                        data.message.usage.cache_creation &&
+                        typeof data.message.usage.cache_creation === 'object'
+                      ) {
+                        currentUsageData.cache_creation = {
+                          ephemeral_5m_input_tokens:
+                            data.message.usage.cache_creation.ephemeral_5m_input_tokens || 0,
+                          ephemeral_1h_input_tokens:
+                            data.message.usage.cache_creation.ephemeral_1h_input_tokens || 0
+                        }
+                        logger.debug(
+                          '📊 Collected detailed cache creation data:',
+                          JSON.stringify(currentUsageData.cache_creation)
+                        )
+                      }
+
+                      logger.debug(
+                        '📊 Collected input/cache data from message_start:',
+                        JSON.stringify(currentUsageData)
+                      )
+                    }
+                  }
+
+                  // message_delta包含累积的完整usage数据（input + output + cache）
+                  if (data.type === 'message_delta' && data.usage) {
+                    // 提取所有usage字段，message_delta包含累积的完整usage信息
+                    if (data.usage.output_tokens !== undefined) {
+                      currentUsageData.output_tokens = data.usage.output_tokens || 0
+                    }
+
+                    // 提取input_tokens（message_delta的usage是累积值，当message_start无usage时这是唯一来源）
+                    if (data.usage.input_tokens !== undefined) {
+                      currentUsageData.input_tokens = data.usage.input_tokens || 0
+                    }
+
+                    // 提取cache相关的tokens
+                    if (data.usage.cache_creation_input_tokens !== undefined) {
+                      currentUsageData.cache_creation_input_tokens =
+                        data.usage.cache_creation_input_tokens || 0
+                    }
+                    if (data.usage.cache_read_input_tokens !== undefined) {
+                      currentUsageData.cache_read_input_tokens =
+                        data.usage.cache_read_input_tokens || 0
+                    }
 
                     // 检查是否有详细的 cache_creation 对象
                     if (
-                      data.message.usage.cache_creation &&
-                      typeof data.message.usage.cache_creation === 'object'
+                      data.usage.cache_creation &&
+                      typeof data.usage.cache_creation === 'object'
                     ) {
                       currentUsageData.cache_creation = {
                         ephemeral_5m_input_tokens:
-                          data.message.usage.cache_creation.ephemeral_5m_input_tokens || 0,
+                          data.usage.cache_creation.ephemeral_5m_input_tokens || 0,
                         ephemeral_1h_input_tokens:
-                          data.message.usage.cache_creation.ephemeral_1h_input_tokens || 0
+                          data.usage.cache_creation.ephemeral_1h_input_tokens || 0
                       }
-                      logger.debug(
-                        '📊 Collected detailed cache creation data:',
-                        JSON.stringify(currentUsageData.cache_creation)
-                      )
                     }
 
                     logger.debug(
-                      '📊 Collected input/cache data from message_start:',
-                      JSON.stringify(currentUsageData)
-                    )
-                  }
-
-                  // message_delta包含最终的output tokens
-                  if (
-                    data.type === 'message_delta' &&
-                    data.usage &&
-                    data.usage.output_tokens !== undefined
-                  ) {
-                    currentUsageData.output_tokens = data.usage.output_tokens || 0
-
-                    logger.debug(
-                      '📊 Collected output data from message_delta:',
+                      '📊 Collected usage data from message_delta:',
                       JSON.stringify(currentUsageData)
                     )
 
-                    // 如果已经收集到了input数据和output数据，这是一个完整的usage
-                    if (currentUsageData.input_tokens !== undefined) {
+                    // message_delta是流的最终usage事件，保存完整数据
+                    if (currentUsageData.output_tokens !== undefined) {
                       logger.debug(
                         '🎯 Complete usage data collected for model:',
                         currentUsageData.model,
                         '- Input:',
                         currentUsageData.input_tokens,
                         'Output:',
-                        currentUsageData.output_tokens
+                        currentUsageData.output_tokens,
+                        'Cache create:',
+                        currentUsageData.cache_creation_input_tokens,
+                        'Cache read:',
+                        currentUsageData.cache_read_input_tokens
                       )
                       // 保存到列表中，但不立即触发回调
                       allUsageData.push({ ...currentUsageData })
