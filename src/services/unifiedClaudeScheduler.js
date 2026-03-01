@@ -71,7 +71,11 @@ class UnifiedClaudeScheduler {
               )
               return false
             }
-            if (info.accountType === 'claude_pro' || info.accountType === 'claude_free') {
+            if (
+              info.accountType === 'claude_pro' ||
+              info.accountType === 'claude_free' ||
+              info.accountType === 'free'
+            ) {
               logger.info(
                 `🚫 Claude account ${account.name} (${info.accountType}) does not support Opus model${context ? ` ${context}` : ''}`
               )
