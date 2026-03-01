@@ -20,6 +20,68 @@ class ClaudeConsoleRelayService {
     this.defaultUserAgent = 'claude-cli/1.0.69 (external, cli)'
   }
 
+  /**
+   * 🔄 转换 messages 数组中的 system role 消息
+   * Console API 不支持 role="system"，需要将 system 内容合并到第一条 user 消息
+   * @param {Object} requestBody - 原始请求体
+   * @returns {Object} 转换后的请求体
+   */
+  _transformSystemMessages(requestBody) {
+    if (!requestBody || !Array.isArray(requestBody.messages)) {
+      return requestBody
+    }
+
+    // 收集所有 system messages 的内容
+    const systemContents = []
+    const nonSystemMessages = []
+
+    for (const msg of requestBody.messages) {
+      if (msg && msg.role === 'system') {
+        systemContents.push(msg.content)
+      } else {
+        nonSystemMessages.push(msg)
+      }
+    }
+
+    // 如果没有 system messages，直接返回原请求
+    if (systemContents.length === 0) {
+      return requestBody
+    }
+
+    // 合并 system 内容到第一条 user 消息
+    const systemText = systemContents.join('\n\n')
+    let transformedMessages = nonSystemMessages
+
+    // 查找第一条 user 消息
+    const firstUserIndex = nonSystemMessages.findIndex((m) => m && m.role === 'user')
+
+    if (firstUserIndex !== -1) {
+      // 将 system 内容前置到第一条 user 消息
+      const firstUserMsg = nonSystemMessages[firstUserIndex]
+      const mergedContent = `${systemText}\n\n${firstUserMsg.content}`
+      transformedMessages = [...nonSystemMessages]
+      transformedMessages[firstUserIndex] = {
+        ...firstUserMsg,
+        content: mergedContent
+      }
+    } else {
+      // 如果没有 user 消息，创建一个包含 system 内容的 user 消息
+      logger.warn(
+        `⚠️ Console API: No user message found to merge system prompt, creating new user message with system content`
+      )
+      transformedMessages = [{ role: 'user', content: systemText }, ...nonSystemMessages]
+    }
+
+    logger.debug(
+      `🔄 Console API: Transformed ${systemContents.length} system message(s) into user message context`
+    )
+
+    return {
+      ...requestBody,
+      messages: transformedMessages
+    }
+  }
+
   // 🚀 转发请求到Claude Console API
   async relayRequest(
     requestBody,
@@ -102,6 +164,9 @@ class ClaudeConsoleRelayService {
         model: mappedModel
       }
 
+      // 🔄 转换 system messages (Console API 不支持 role="system")
+      const transformedRequestBody = this._transformSystemMessages(modifiedRequestBody)
+
       // 模型兼容性检查已经在调度器中完成，这里不需要再检查
 
       // 创建代理agent
@@ -158,7 +223,7 @@ class ClaudeConsoleRelayService {
       const requestConfig = {
         method: 'POST',
         url: apiEndpoint,
-        data: modifiedRequestBody,
+        data: transformedRequestBody,
         headers: {
           'Content-Type': 'application/json',
           'anthropic-version': '2023-06-01',
@@ -489,6 +554,9 @@ class ClaudeConsoleRelayService {
         model: mappedModel
       }
 
+      // 🔄 转换 system messages (Console API 不支持 role="system")
+      const transformedRequestBody = this._transformSystemMessages(modifiedRequestBody)
+
       // 模型兼容性检查已经在调度器中完成，这里不需要再检查
 
       // 创建代理agent
@@ -496,7 +564,7 @@ class ClaudeConsoleRelayService {
 
       // 发送流式请求
       await this._makeClaudeConsoleStreamRequest(
-        modifiedRequestBody,
+        transformedRequestBody,
         account,
         apiKeyData,
         proxyAgent,
@@ -1152,6 +1220,9 @@ class ClaudeConsoleRelayService {
         model: mappedModel
       }
 
+      // 🔄 转换 system messages (Console API 不支持 role="system")
+      const transformedRequestBody = this._transformSystemMessages(modifiedRequestBody)
+
       // 创建代理agent
       const proxyAgent = claudeConsoleAccountService._createProxyAgent(account.proxy)
 
@@ -1167,7 +1238,7 @@ class ClaudeConsoleRelayService {
         response = await axios({
           method: 'POST',
           url: apiEndpoint,
-          data: modifiedRequestBody,
+          data: transformedRequestBody,
           headers: {
             'Content-Type': 'application/json',
             'anthropic-version': '2023-06-01',
