@@ -275,8 +275,8 @@ update-docker-compose:
 update-docker-env:
 	cp .env ${HOME}/service/claude-relay/
 
-restart-claude-relay: 
-	ssh cc2 "cd /home/ubuntu/cc-club && docker compose up --pull always -d claude-relay"
+restart-claude-relay:
+	ssh cc2 "cd /home/ubuntu/cc-club && docker compose pull claude-relay && docker compose up -d --no-deps claude-relay"
 
 get-compose:
 	scp cc2:/home/ubuntu/cc-club/compose.yml ./docker-compose.yml
