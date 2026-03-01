@@ -283,11 +283,20 @@ async function handleChatCompletion(req, res, apiKeyData) {
               : usage.cache_creation_input_tokens || 0) || 0
           const cacheReadTokens = usage.cache_read_input_tokens || 0
 
+          // 附加请求元数据用于计费特性检测
+          const usageWithRequestMeta = { ...usage }
+          if (req.headers['anthropic-beta']) {
+            usageWithRequestMeta.request_anthropic_beta = req.headers['anthropic-beta']
+          }
+          if (req.body?.speed) {
+            usageWithRequestMeta.request_speed = req.body.speed
+          }
+
           // 使用新的 recordUsageWithDetails 方法来支持详细的缓存数据
           apiKeyService
             .recordUsageWithDetails(
               apiKeyData.id,
-              usage, // 直接传递整个 usage 对象，包含可能的 cache_creation 详细数据
+              usageWithRequestMeta,
               model,
               accountId,
               accountType,
@@ -308,7 +317,7 @@ async function handleChatCompletion(req, res, apiKeyData) {
             model,
             `openai-${accountType}-stream`,
             apiKeyData.useBooster,
-            usage
+            usageWithRequestMeta
           )
         }
       }
@@ -411,11 +420,21 @@ async function handleChatCompletion(req, res, apiKeyData) {
               (usage.cache_creation.ephemeral_1h_input_tokens || 0)
             : usage.cache_creation_input_tokens || 0) || 0
         const cacheReadTokens = usage.cache_read_input_tokens || 0
+
+        // 附加请求元数据用于计费特性检测
+        const usageWithRequestMeta = { ...usage }
+        if (req.headers['anthropic-beta']) {
+          usageWithRequestMeta.request_anthropic_beta = req.headers['anthropic-beta']
+        }
+        if (req.body?.speed) {
+          usageWithRequestMeta.request_speed = req.body.speed
+        }
+
         // 使用新的 recordUsageWithDetails 方法来支持详细的缓存数据
         apiKeyService
           .recordUsageWithDetails(
             apiKeyData.id,
-            usage, // 直接传递整个 usage 对象，包含可能的 cache_creation 详细数据
+            usageWithRequestMeta,
             claudeRequest.model,
             accountId,
             accountType,
@@ -436,7 +455,7 @@ async function handleChatCompletion(req, res, apiKeyData) {
           claudeRequest.model,
           `openai-${accountType}-non-stream`,
           apiKeyData.useBooster,
-          usage
+          usageWithRequestMeta
         )
       }
 

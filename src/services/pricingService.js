@@ -33,15 +33,14 @@ class PricingService {
     // 在 pricingData 加载后通过 buildEphemeral1hPricing() 自动填充
     this.ephemeral1hPricing = {}
 
-    // 硬编码的 1M 上下文模型价格（美元/token）
-    // 当总输入 tokens 超过 200k 时使用这些价格
-    this.longContextPricing = {
-      // claude-sonnet-4-20250514[1m] 模型的 1M 上下文价格
-      'claude-sonnet-4-20250514[1m]': {
-        input: 0.000006, // $6/MTok
-        output: 0.0000225 // $22.50/MTok
-      }
-      // 未来可以添加更多 1M 模型的价格
+    // Claude 缓存价格倍率（相对于 input_cost_per_token）
+    this.claudeCacheMultipliers = { write5m: 1.25, write1h: 2, read: 0.1 }
+
+    // Claude 功能特性标识
+    this.claudeFeatureFlags = {
+      context1mBeta: 'context-1m-2025-08-07',
+      fastModeBeta: 'fast-mode-2026-02-01',
+      fastModeSpeed: 'fast'
     }
   }
 
@@ -474,9 +473,15 @@ class PricingService {
   }
 
   // 获取 1 小时缓存价格
-  getEphemeral1hPricing(modelName) {
+  getEphemeral1hPricing(modelName, pricing = null) {
     if (!modelName) {
       return 0
+    }
+
+    // 如果传入了 pricing 对象，优先使用其 cache_creation_input_token_cost_above_1hr 字段
+    const pricingVal = pricing?.cache_creation_input_token_cost_above_1hr
+    if (pricingVal !== null && pricingVal !== undefined) {
+      return pricingVal
     }
 
     // 尝试直接匹配（从 model_pricing.json 动态构建的映射表）
@@ -485,12 +490,12 @@ class PricingService {
     }
 
     // 尝试通过 getModelPricing 模糊匹配（处理 Bedrock 区域前缀等变体模型名）
-    const pricing = this.getModelPricing(modelName)
-    if (pricing?.cache_creation_input_token_cost_above_1hr) {
+    const lookedUp = this.getModelPricing(modelName)
+    if (lookedUp?.cache_creation_input_token_cost_above_1hr) {
       logger.debug(
-        `💰 Found 1h cache pricing for ${modelName} via fuzzy match: ${pricing.cache_creation_input_token_cost_above_1hr}`
+        `💰 Found 1h cache pricing for ${modelName} via fuzzy match: ${lookedUp.cache_creation_input_token_cost_above_1hr}`
       )
-      return pricing.cache_creation_input_token_cost_above_1hr
+      return lookedUp.cache_creation_input_token_cost_above_1hr
     }
 
     // 兜底：仅在 model_pricing.json 中完全找不到该模型时触发，使用最新主力模型价格
@@ -566,132 +571,201 @@ class PricingService {
     return pricing?.mode === 'video_generation'
   }
 
+  // 从 usage 中提取 anthropic-beta 功能集合
+  extractBetaFeatures(usage) {
+    const betaStr = usage?.request_anthropic_beta || ''
+    if (!betaStr) {
+      return new Set()
+    }
+    return new Set(betaStr.split(',').map((s) => s.trim()))
+  }
+
+  // 从 usage 中提取 speed 信号（响应 speed 或请求 request_speed）
+  extractSpeedSignal(usage) {
+    return usage?.speed || usage?.request_speed || null
+  }
+
+  // 去除模型名称中的 [1m] 后缀
+  stripLongContextSuffix(modelName) {
+    if (!modelName) {
+      return modelName
+    }
+    return modelName.replace(/\[1m\]$/, '')
+  }
+
   // 计算使用费用
   calculateCost(usage, modelName) {
-    // 检查是否为 1M 上下文模型
-    const isLongContextModel = modelName && modelName.includes('[1m]')
-    let isLongContextRequest = false
-    let useLongContextPricing = false
-
-    if (isLongContextModel) {
-      // 计算总输入 tokens
-      const inputTokens = usage.input_tokens || 0
-      const cacheCreationTokens = usage.cache_creation_input_tokens || 0
-      const cacheReadTokens = usage.cache_read_input_tokens || 0
-      const totalInputTokens = inputTokens + cacheCreationTokens + cacheReadTokens
-
-      // 如果总输入超过 200k，使用 1M 上下文价格
-      if (totalInputTokens > 200000) {
-        isLongContextRequest = true
-        // 检查是否有硬编码的 1M 价格
-        if (this.longContextPricing[modelName]) {
-          useLongContextPricing = true
-        } else {
-          // 如果没有找到硬编码价格，使用第一个 1M 模型的价格作为默认
-          const defaultLongContextModel = Object.keys(this.longContextPricing)[0]
-          if (defaultLongContextModel) {
-            useLongContextPricing = true
-            logger.warn(
-              `⚠️ No specific 1M pricing for ${modelName}, using default from ${defaultLongContextModel}`
-            )
-          }
-        }
+    const noPricingResult = {
+      inputCost: 0,
+      outputCost: 0,
+      cacheCreateCost: 0,
+      cacheReadCost: 0,
+      ephemeral5mCost: 0,
+      ephemeral1hCost: 0,
+      imageInputCost: 0,
+      imageOutputCost: 0,
+      imageTotalCost: 0,
+      videoOutputCost: 0,
+      mediaTotalCost: 0,
+      totalCost: 0,
+      hasPricing: false,
+      isLongContextRequest: false,
+      isFastMode: false,
+      isImageModel: false,
+      isVideoModel: false,
+      isMediaModel: false,
+      pricing: {
+        input: 0,
+        output: 0,
+        cacheCreate: 0,
+        cacheRead: 0,
+        ephemeral1h: 0,
+        inputPerImage: 0,
+        outputPerImage: 0,
+        outputPerImageToken: 0,
+        inputPerPixel: 0,
+        outputPerPixel: 0,
+        outputPerSecond: 0
       }
     }
 
+    // ========== Feature Detection ==========
+    const betaFeatures = this.extractBetaFeatures(usage)
+    const speedSignal = this.extractSpeedSignal(usage)
+
+    // 检查 context-1m beta（触发 200K+ 定价，无需 [1m] 后缀）
+    const hasContext1mBeta = betaFeatures.has(this.claudeFeatureFlags.context1mBeta)
+
+    // 检查 fast mode（需要 beta header 和 speed 信号同时出现才确认）
+    const hasFastModeBeta = betaFeatures.has(this.claudeFeatureFlags.fastModeBeta)
+    const hasFastSpeed = speedSignal === this.claudeFeatureFlags.fastModeSpeed
+    const isFastModeRequest = hasFastModeBeta && hasFastSpeed
+
+    // 去除 [1m] 后缀以获取基础模型名
+    const baseModelName = this.stripLongContextSuffix(modelName)
+    const isLongContextModel = modelName && modelName.includes('[1m]')
+
+    // ========== Pricing Lookup ==========
     const pricing = this.getModelPricing(modelName)
+
+    // Fast Mode 倍率：从 provider_specific_entry.fast 读取，没有则不应用
+    const fastMultiplier =
+      isFastModeRequest && pricing?.provider_specific_entry?.fast
+        ? pricing.provider_specific_entry.fast
+        : 1
+    const isFastMode = fastMultiplier > 1
+
+    if (isFastMode) {
+      logger.info(
+        `🚀 Fast mode ${fastMultiplier}x multiplier applied for ${baseModelName} (from provider_specific_entry)`
+      )
+    } else if (isFastModeRequest) {
+      logger.warn(
+        `⚠️ Fast mode request detected but no fast pricing found for ${baseModelName}; fallback to standard profile`
+      )
+    }
 
     // Detect media model types
     const isImageModel = this.isImageGenerationModel(pricing)
     const isVideoModel = this.isVideoGenerationModel(pricing)
     const isMediaModelFlag = isImageModel || isVideoModel
 
-    if (!pricing && !useLongContextPricing) {
-      return {
-        inputCost: 0,
-        outputCost: 0,
-        cacheCreateCost: 0,
-        cacheReadCost: 0,
-        ephemeral5mCost: 0,
-        ephemeral1hCost: 0,
-        // Media cost fields
-        imageInputCost: 0,
-        imageOutputCost: 0,
-        imageTotalCost: 0,
-        videoOutputCost: 0,
-        mediaTotalCost: 0,
-        totalCost: 0,
-        hasPricing: false,
-        isLongContextRequest: false,
-        // Media model flags
-        isImageModel: false,
-        isVideoModel: false,
-        isMediaModel: false,
-        pricing: {
-          input: 0,
-          output: 0,
-          cacheCreate: 0,
-          cacheRead: 0,
-          ephemeral1h: 0,
-          // Media pricing rates
-          inputPerImage: 0,
-          outputPerImage: 0,
-          outputPerImageToken: 0,
-          inputPerPixel: 0,
-          outputPerPixel: 0,
-          outputPerSecond: 0
-        }
+    if (!pricing) {
+      return noPricingResult
+    }
+
+    // ========== 200K+ Long Context Detection ==========
+    const inputTokens = usage.input_tokens || 0
+    const cacheCreationTokens = usage.cache_creation_input_tokens || 0
+    const cacheReadTokens = usage.cache_read_input_tokens || 0
+    const totalInputTokens = inputTokens + cacheCreationTokens + cacheReadTokens
+
+    // 200K+ 定价触发条件：[1m] 后缀 或 context-1m beta，且总输入超过 200k
+    const isLongContextRequest =
+      (isLongContextModel || hasContext1mBeta) && totalInputTokens > 200000
+
+    // ========== Input/Output Cost ==========
+    let inputPrice = pricing.input_cost_per_token || 0
+    let outputPrice = pricing.output_cost_per_token || 0
+
+    if (isLongContextRequest) {
+      // 优先使用 model_pricing.json 中的 above_200k 字段
+      if (pricing.input_cost_per_token_above_200k_tokens !== undefined) {
+        inputPrice = pricing.input_cost_per_token_above_200k_tokens
+      } else if (baseModelName.startsWith('claude-')) {
+        // Claude 模型兜底：2× 基础输入价格
+        inputPrice = (pricing.input_cost_per_token || 0) * 2
+        logger.info(`💰 Using 200K+ fallback (2× input) for ${modelName}: $${inputPrice}/token`)
+      }
+      if (pricing.output_cost_per_token_above_200k_tokens !== undefined) {
+        outputPrice = pricing.output_cost_per_token_above_200k_tokens
+      }
+      logger.info(
+        `💰 Using 200K+ pricing for ${modelName}: input=$${inputPrice}/token, output=$${outputPrice}/token`
+      )
+    }
+
+    // ========== Cache Pricing ==========
+    // 对于 Claude 模型，如果 model_pricing.json 缺少 cache 字段，通过 input × multiplier 推导
+    const isClaudeModel = baseModelName.startsWith('claude-')
+
+    let cacheWritePrice = pricing.cache_creation_input_token_cost
+    let cacheReadPrice = pricing.cache_read_input_token_cost
+    let cache1hWritePrice = pricing.cache_creation_input_token_cost_above_1hr
+
+    if (isClaudeModel && cacheWritePrice === undefined) {
+      cacheWritePrice = (pricing.input_cost_per_token || 0) * this.claudeCacheMultipliers.write5m
+    }
+    if (isClaudeModel && cache1hWritePrice === undefined) {
+      cache1hWritePrice = (pricing.input_cost_per_token || 0) * this.claudeCacheMultipliers.write1h
+    }
+    if (isClaudeModel && cacheReadPrice === undefined) {
+      cacheReadPrice = (pricing.input_cost_per_token || 0) * this.claudeCacheMultipliers.read
+    }
+
+    // 200K+ 时也升级 cache 价格
+    if (isLongContextRequest) {
+      if (pricing.cache_creation_input_token_cost_above_200k_tokens !== undefined) {
+        cacheWritePrice = pricing.cache_creation_input_token_cost_above_200k_tokens
+      }
+      if (pricing.cache_read_input_token_cost_above_200k_tokens !== undefined) {
+        cacheReadPrice = pricing.cache_read_input_token_cost_above_200k_tokens
       }
     }
 
-    let inputCost = 0
-    let outputCost = 0
+    cacheWritePrice = cacheWritePrice || 0
+    cacheReadPrice = cacheReadPrice || 0
+    cache1hWritePrice = cache1hWritePrice || 0
 
-    if (useLongContextPricing) {
-      // 使用 1M 上下文特殊价格（仅输入和输出价格改变）
-      const longContextPrices =
-        this.longContextPricing[modelName] ||
-        this.longContextPricing[Object.keys(this.longContextPricing)[0]]
-
-      inputCost = (usage.input_tokens || 0) * longContextPrices.input
-      outputCost = (usage.output_tokens || 0) * longContextPrices.output
-
-      logger.info(
-        `💰 Using 1M context pricing for ${modelName}: input=$${longContextPrices.input}/token, output=$${longContextPrices.output}/token`
-      )
-    } else {
-      // 使用正常价格
-      inputCost = (usage.input_tokens || 0) * (pricing?.input_cost_per_token || 0)
-      outputCost = (usage.output_tokens || 0) * (pricing?.output_cost_per_token || 0)
+    // ========== 应用 Fast Mode 倍率（在 200K+ 价格之上叠加） ==========
+    if (fastMultiplier > 1) {
+      inputPrice *= fastMultiplier
+      outputPrice *= fastMultiplier
+      cacheWritePrice *= fastMultiplier
+      cacheReadPrice *= fastMultiplier
+      cache1hWritePrice *= fastMultiplier
     }
 
-    // 缓存价格保持不变（即使对于 1M 模型）
-    const cacheReadCost =
-      (usage.cache_read_input_tokens || 0) * (pricing?.cache_read_input_token_cost || 0)
+    const inputCost = inputTokens * inputPrice
+    const outputCost = (usage.output_tokens || 0) * outputPrice
 
-    // 处理缓存创建费用：
-    // 1. 如果有详细的 cache_creation 对象，使用它
-    // 2. 否则使用总的 cache_creation_input_tokens（向后兼容）
+    const cacheReadCost = (usage.cache_read_input_tokens || 0) * cacheReadPrice
+
+    // 处理缓存创建费用
     let ephemeral5mCost = 0
     let ephemeral1hCost = 0
     let cacheCreateCost = 0
 
     if (usage.cache_creation && typeof usage.cache_creation === 'object') {
-      // 有详细的缓存创建数据
       const ephemeral5mTokens = usage.cache_creation.ephemeral_5m_input_tokens || 0
       const ephemeral1hTokens = usage.cache_creation.ephemeral_1h_input_tokens || 0
       const totalCacheTokens = ephemeral5mTokens + ephemeral1hTokens
 
-      // 统一按 cache_creation_input_token_cost (1.25×) 定价
-      // 与 Claude Code 官方保持一致：所有 cache_creation_input_tokens 使用相同单价
-      const cacheWritePrice = pricing?.cache_creation_input_token_cost || 0
       cacheCreateCost = totalCacheTokens * cacheWritePrice
       ephemeral5mCost = ephemeral5mTokens * cacheWritePrice
       ephemeral1hCost = ephemeral1hTokens * cacheWritePrice
     } else if (usage.cache_creation_input_tokens) {
-      // 旧格式，所有缓存创建 tokens 都按标准缓存写入价格计算（向后兼容）
-      cacheCreateCost =
-        (usage.cache_creation_input_tokens || 0) * (pricing?.cache_creation_input_token_cost || 0)
+      cacheCreateCost = (usage.cache_creation_input_tokens || 0) * cacheWritePrice
       ephemeral5mCost = cacheCreateCost
     }
 
@@ -786,26 +860,17 @@ class PricingService {
       totalCost,
       hasPricing: true,
       isLongContextRequest,
+      isFastMode,
       // Media model flags
       isImageModel,
       isVideoModel,
       isMediaModel: isMediaModelFlag,
       pricing: {
-        input: useLongContextPricing
-          ? (
-              this.longContextPricing[modelName] ||
-              this.longContextPricing[Object.keys(this.longContextPricing)[0]]
-            )?.input || 0
-          : pricing?.input_cost_per_token || 0,
-        output: useLongContextPricing
-          ? (
-              this.longContextPricing[modelName] ||
-              this.longContextPricing[Object.keys(this.longContextPricing)[0]]
-            )?.output || 0
-          : pricing?.output_cost_per_token || 0,
-        cacheCreate: pricing?.cache_creation_input_token_cost || 0,
-        cacheRead: pricing?.cache_read_input_token_cost || 0,
-        ephemeral1h: this.getEphemeral1hPricing(modelName),
+        input: inputPrice,
+        output: outputPrice,
+        cacheCreate: cacheWritePrice,
+        cacheRead: cacheReadPrice,
+        ephemeral1h: this.getEphemeral1hPricing(baseModelName, pricing),
         // Media pricing rates
         inputPerImage: pricing?.input_cost_per_image || 0,
         outputPerImage: pricing?.output_cost_per_image || 0,

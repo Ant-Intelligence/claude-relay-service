@@ -24,7 +24,7 @@ const router = express.Router()
  * @param {string} fallbackModel - 备选模型名称（从请求中获取）
  * @returns {Object} 规范化后的 usage 数据
  */
-function normalizeUsageData(usageData, fallbackModel) {
+function normalizeUsageData(usageData, fallbackModel, reqHeaders, reqBody) {
   const inputTokens = usageData.input_tokens || 0
   const outputTokens = usageData.output_tokens || 0
 
@@ -57,6 +57,18 @@ function normalizeUsageData(usageData, fallbackModel) {
       ephemeral_5m_input_tokens: ephemeral5mTokens,
       ephemeral_1h_input_tokens: ephemeral1hTokens
     }
+  }
+
+  // 附加请求元数据用于计费特性检测（fast mode、context-1m 等）
+  if (reqHeaders?.['anthropic-beta']) {
+    usageObject.request_anthropic_beta = reqHeaders['anthropic-beta']
+  }
+  if (reqBody?.speed) {
+    usageObject.request_speed = reqBody.speed
+  }
+  // 响应中的 speed 字段（由上游 API 返回）
+  if (usageData.speed) {
+    usageObject.speed = usageData.speed
   }
 
   return {
@@ -260,7 +272,7 @@ async function handleMessagesRequest(req, res) {
                 model,
                 usageObject,
                 totalTokens
-              } = normalizeUsageData(usageData, req.body.model)
+              } = normalizeUsageData(usageData, req.body.model, req.headers, req.body)
               const { accountId: usageAccountId } = usageData
 
               apiKeyService
@@ -327,7 +339,7 @@ async function handleMessagesRequest(req, res) {
                     model,
                     usageObject,
                     totalTokens
-                  } = normalizeUsageData(usageData, req.body.model)
+                  } = normalizeUsageData(usageData, req.body.model, req.headers, req.body)
                   const { accountId: usageAccountId } = usageData
 
                   apiKeyService
@@ -453,7 +465,12 @@ async function handleMessagesRequest(req, res) {
               usageData.output_tokens !== undefined
             ) {
               // 使用统一的 usage 数据规范化函数
-              const normalized = normalizeUsageData(usageData, req.body.model)
+              const normalized = normalizeUsageData(
+                usageData,
+                req.body.model,
+                req.headers,
+                req.body
+              )
               const {
                 inputTokens,
                 outputTokens,
@@ -593,7 +610,7 @@ async function handleMessagesRequest(req, res) {
                   model,
                   usageObject,
                   totalTokens
-                } = normalizeUsageData(usageData, req.body.model)
+                } = normalizeUsageData(usageData, req.body.model, req.headers, req.body)
                 const { accountId: usageAccountId } = usageData
 
                 apiKeyService
