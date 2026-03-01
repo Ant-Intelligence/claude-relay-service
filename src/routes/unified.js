@@ -2,10 +2,10 @@ const express = require('express')
 const { authenticateApiKey } = require('../middleware/auth')
 const logger = require('../utils/logger')
 const { handleChatCompletion } = require('./openaiClaudeRoutes')
-// 从 handlers/geminiHandlers.js 导入处理函数
+// 从 handlers/geminiHandlers.js 导入 standard 处理函数（支持 OAuth + API Key 双账户类型）
 const {
-  handleGenerateContent: geminiHandleGenerateContent,
-  handleStreamGenerateContent: geminiHandleStreamGenerateContent
+  handleStandardGenerateContent: geminiHandleGenerateContent,
+  handleStandardStreamGenerateContent: geminiHandleStreamGenerateContent
 } = require('../handlers/geminiHandlers')
 const openaiRoutes = require('./openaiRoutes')
 const apiKeyService = require('../services/apiKeyService')
@@ -84,18 +84,29 @@ async function routeToBackend(req, res, requestedModel) {
       })
     }
 
-    // 转换为 Gemini 格式
+    // 转换为标准 Gemini API contents 格式（handleStandard* 需要）
+    const isStream = req.body.stream || false
     const geminiRequest = {
-      model: requestedModel,
-      messages: req.body.messages,
-      temperature: req.body.temperature || 0.7,
-      max_tokens: req.body.max_tokens || 4096,
-      stream: req.body.stream || false
+      contents: req.body.messages.map((msg) => ({
+        role: msg.role === 'assistant' ? 'model' : msg.role,
+        parts: [
+          { text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) }
+        ]
+      })),
+      generationConfig: {
+        temperature: req.body.temperature !== undefined ? req.body.temperature : 0.7,
+        maxOutputTokens: req.body.max_tokens !== undefined ? req.body.max_tokens : 4096,
+        topP: req.body.top_p !== undefined ? req.body.top_p : 0.95,
+        topK: req.body.top_k !== undefined ? req.body.top_k : 40
+      }
     }
 
     req.body = geminiRequest
+    // Standard handlers 从 req.params.modelName 获取模型名
+    req.params = req.params || {}
+    req.params.modelName = requestedModel
 
-    if (geminiRequest.stream) {
+    if (isStream) {
       return await geminiHandleStreamGenerateContent(req, res)
     } else {
       return await geminiHandleGenerateContent(req, res)
