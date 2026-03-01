@@ -2207,7 +2207,7 @@ class ClaudeRelayService {
               ;(async () => {
                 try {
                   logger.error(
-                    `🚫 [Stream] Organization disabled error (400) detected for account ${accountId}, marking as blocked`
+                    `🚫 [Stream] Organization disabled/banned error (${res.statusCode}) detected for account ${accountId}, marking as blocked`
                   )
                   await unifiedClaudeScheduler.markAccountBlocked(
                     accountId,
