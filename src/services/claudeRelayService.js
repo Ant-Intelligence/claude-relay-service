@@ -2143,8 +2143,29 @@ class ClaudeRelayService {
         let currentUsageData = {} // 当前正在收集的usage数据
         let rateLimitDetected = false // 限流检测标志
 
+        // 🔧 处理上游 gzip/deflate 压缩：Anthropic (经 Cloudflare) 可能返回压缩响应
+        const upstreamEncoding = res.headers['content-encoding']
+        let dataSource = res
+        if (upstreamEncoding === 'gzip') {
+          dataSource = res.pipe(zlib.createGunzip())
+          dataSource.on('error', (err) => {
+            logger.error('❌ Gzip decompression error in stream:', err.message)
+            if (isStreamWritable(responseStream)) {
+              responseStream.end()
+            }
+          })
+        } else if (upstreamEncoding === 'deflate') {
+          dataSource = res.pipe(zlib.createInflate())
+          dataSource.on('error', (err) => {
+            logger.error('❌ Deflate decompression error in stream:', err.message)
+            if (isStreamWritable(responseStream)) {
+              responseStream.end()
+            }
+          })
+        }
+
         // 监听数据块，解析SSE并寻找usage信息
-        res.on('data', (chunk) => {
+        dataSource.on('data', (chunk) => {
           try {
             const chunkStr = chunk.toString()
 
@@ -2326,7 +2347,7 @@ class ClaudeRelayService {
           }
         })
 
-        res.on('end', async () => {
+        dataSource.on('end', async () => {
           try {
             // 处理缓冲区中剩余的数据
             if (buffer.trim() && isStreamWritable(responseStream)) {
