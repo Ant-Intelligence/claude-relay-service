@@ -449,33 +449,40 @@ class UnifiedClaudeScheduler {
           boundAccount.status !== 'blocked' &&
           boundAccount.status !== 'temp_error'
         ) {
-          const isRateLimited = await claudeAccountService.isAccountRateLimited(boundAccount.id)
-          if (isRateLimited) {
-            const rateInfo = await claudeAccountService.getAccountRateLimitInfo(boundAccount.id)
-            const error = new Error('Dedicated Claude account is rate limited')
-            error.code = 'CLAUDE_DEDICATED_RATE_LIMITED'
-            error.accountId = boundAccount.id
-            error.rateLimitEndAt = rateInfo?.rateLimitEndAt || boundAccount.rateLimitEndAt || null
-            throw error
-          }
-
-          if (!this._isSchedulable(boundAccount.schedulable)) {
+          // 检查是否临时不可用
+          if (await this.isAccountTemporarilyUnavailable(boundAccount.id, 'claude-official')) {
             logger.warn(
-              `⚠️ Bound Claude OAuth account ${apiKeyData.claudeAccountId} is not schedulable (schedulable: ${boundAccount?.schedulable})`
+              `⏱️ Bound Claude OAuth account ${apiKeyData.claudeAccountId} is temporarily unavailable, falling back to shared pool`
             )
           } else {
-            logger.info(
-              `🎯 Using bound dedicated Claude OAuth account: ${boundAccount.name} (${apiKeyData.claudeAccountId})`
-            )
-            return [
-              {
-                ...boundAccount,
-                accountId: boundAccount.id,
-                accountType: 'claude-official',
-                priority: parseInt(boundAccount.priority) || 50,
-                lastUsedAt: boundAccount.lastUsedAt || '0'
-              }
-            ]
+            const isRateLimited = await claudeAccountService.isAccountRateLimited(boundAccount.id)
+            if (isRateLimited) {
+              const rateInfo = await claudeAccountService.getAccountRateLimitInfo(boundAccount.id)
+              const error = new Error('Dedicated Claude account is rate limited')
+              error.code = 'CLAUDE_DEDICATED_RATE_LIMITED'
+              error.accountId = boundAccount.id
+              error.rateLimitEndAt = rateInfo?.rateLimitEndAt || boundAccount.rateLimitEndAt || null
+              throw error
+            }
+
+            if (!this._isSchedulable(boundAccount.schedulable)) {
+              logger.warn(
+                `⚠️ Bound Claude OAuth account ${apiKeyData.claudeAccountId} is not schedulable (schedulable: ${boundAccount?.schedulable})`
+              )
+            } else {
+              logger.info(
+                `🎯 Using bound dedicated Claude OAuth account: ${boundAccount.name} (${apiKeyData.claudeAccountId})`
+              )
+              return [
+                {
+                  ...boundAccount,
+                  accountId: boundAccount.id,
+                  accountType: 'claude-official',
+                  priority: parseInt(boundAccount.priority) || 50,
+                  lastUsedAt: boundAccount.lastUsedAt || '0'
+                }
+              ]
+            }
           }
         } else {
           logger.warn(
@@ -496,6 +503,12 @@ class UnifiedClaudeScheduler {
         boundConsoleAccount.status === 'active' &&
         this._isSchedulable(boundConsoleAccount.schedulable)
       ) {
+        // 检查是否临时不可用
+        const isTempUnavailable = await this.isAccountTemporarilyUnavailable(
+          boundConsoleAccount.id,
+          'claude-console'
+        )
+
         // 主动触发一次额度检查
         try {
           await claudeConsoleAccountService.checkQuotaUsage(boundConsoleAccount.id)
@@ -514,7 +527,7 @@ class UnifiedClaudeScheduler {
           boundConsoleAccount.id
         )
 
-        if (!isRateLimited && !isQuotaExceeded) {
+        if (!isTempUnavailable && !isRateLimited && !isQuotaExceeded) {
           logger.info(
             `🎯 Using bound dedicated Claude Console account: ${boundConsoleAccount.name} (${apiKeyData.claudeConsoleAccountId})`
           )
@@ -545,18 +558,25 @@ class UnifiedClaudeScheduler {
         boundBedrockAccountResult.data.isActive === true &&
         this._isSchedulable(boundBedrockAccountResult.data.schedulable)
       ) {
-        logger.info(
-          `🎯 Using bound dedicated Bedrock account: ${boundBedrockAccountResult.data.name} (${apiKeyData.bedrockAccountId})`
-        )
-        return [
-          {
-            ...boundBedrockAccountResult.data,
-            accountId: boundBedrockAccountResult.data.id,
-            accountType: 'bedrock',
-            priority: parseInt(boundBedrockAccountResult.data.priority) || 50,
-            lastUsedAt: boundBedrockAccountResult.data.lastUsedAt || '0'
-          }
-        ]
+        // 检查是否临时不可用
+        if (await this.isAccountTemporarilyUnavailable(apiKeyData.bedrockAccountId, 'bedrock')) {
+          logger.warn(
+            `⏱️ Bound Bedrock account ${apiKeyData.bedrockAccountId} is temporarily unavailable, falling back to shared pool`
+          )
+        } else {
+          logger.info(
+            `🎯 Using bound dedicated Bedrock account: ${boundBedrockAccountResult.data.name} (${apiKeyData.bedrockAccountId})`
+          )
+          return [
+            {
+              ...boundBedrockAccountResult.data,
+              accountId: boundBedrockAccountResult.data.id,
+              accountType: 'bedrock',
+              priority: parseInt(boundBedrockAccountResult.data.priority) || 50,
+              lastUsedAt: boundBedrockAccountResult.data.lastUsedAt || '0'
+            }
+          ]
+        }
       } else {
         logger.warn(
           `⚠️ Bound Bedrock account ${apiKeyData.bedrockAccountId} is not available (isActive: ${boundBedrockAccountResult?.data?.isActive}, schedulable: ${boundBedrockAccountResult?.data?.schedulable})`
@@ -942,10 +962,7 @@ class UnifiedClaudeScheduler {
         }
 
         // 检查是否被标记为临时不可用（网络错误熔断）
-        const tempUnavailableKey = `temp_unavailable:${accountId}`
-        const isTempUnavailable = await redis.getClientSafe().get(tempUnavailableKey)
-        if (isTempUnavailable) {
-          logger.info(`⏱️ Account ${accountId} is temporarily unavailable (session check)`)
+        if (await this.isAccountTemporarilyUnavailable(accountId, 'claude-official')) {
           return false
         }
 
@@ -1022,12 +1039,7 @@ class UnifiedClaudeScheduler {
         }
 
         // 检查是否被标记为临时不可用（网络错误熔断）
-        const consoleTempUnavailableKey = `temp_unavailable:${accountId}`
-        const isConsoleTempUnavailable = await redis.getClientSafe().get(consoleTempUnavailableKey)
-        if (isConsoleTempUnavailable) {
-          logger.info(
-            `⏱️ Claude Console account ${accountId} is temporarily unavailable (session check)`
-          )
+        if (await this.isAccountTemporarilyUnavailable(accountId, 'claude-console')) {
           return false
         }
 
@@ -1040,6 +1052,10 @@ class UnifiedClaudeScheduler {
         // 检查是否可调度
         if (!this._isSchedulable(accountResult.data.schedulable)) {
           logger.info(`🚫 Bedrock account ${accountId} is not schedulable`)
+          return false
+        }
+        // 检查是否被标记为临时不可用（网络错误熔断）
+        if (await this.isAccountTemporarilyUnavailable(accountId, 'bedrock')) {
           return false
         }
         // Bedrock账户暂不需要限流检查，因为AWS管理限流
@@ -1094,6 +1110,10 @@ class UnifiedClaudeScheduler {
         }
         // 检查是否过载（529错误）
         if (await ccrAccountService.isAccountOverloaded(accountId)) {
+          return false
+        }
+        // 检查是否被标记为临时不可用（网络错误熔断）
+        if (await this.isAccountTemporarilyUnavailable(accountId, 'ccr')) {
           return false
         }
         return true
@@ -1359,6 +1379,23 @@ class UnifiedClaudeScheduler {
     }
   }
 
+  // ⏱️ 检查账户是否被标记为临时不可用
+  async isAccountTemporarilyUnavailable(accountId, accountType = '') {
+    try {
+      const client = redis.getClientSafe()
+      const key = `temp_unavailable:${accountId}`
+      const value = await client.get(key)
+      if (value) {
+        logger.info(`⏱️ Account ${accountId} (${accountType}) is temporarily unavailable`)
+        return true
+      }
+      return false
+    } catch (error) {
+      logger.warn(`⚠️ Failed to check temp unavailability for ${accountId}: ${error.message}`)
+      return false
+    }
+  }
+
   // 🚫 标记Claude Console账户为封锁状态（模型不支持）
   async blockConsoleAccount(accountId, reason) {
     try {
@@ -1530,6 +1567,17 @@ class UnifiedClaudeScheduler {
         }
 
         if (isActive && statusOk && isSchedulable) {
+          // 检查是否临时不可用
+          if (await this.isAccountTemporarilyUnavailable(account.id, accountType)) {
+            logger.info(`   └─ ⚠️ Skipped: temp_unavailable`)
+            skippedReasons.push({
+              memberId,
+              accountName: account.name,
+              reason: 'temp_unavailable'
+            })
+            continue
+          }
+
           // 检查模型支持
           if (!this._isModelSupportedByAccount(account, accountType, requestedModel, 'in group')) {
             skippedReasons.push({
@@ -1748,6 +1796,11 @@ class UnifiedClaudeScheduler {
           // 检查模型支持
           if (!this._isModelSupportedByAccount(account, 'ccr', requestedModel)) {
             logger.debug(`CCR account ${account.name} does not support model ${requestedModel}`)
+            continue
+          }
+
+          // 检查是否临时不可用
+          if (await this.isAccountTemporarilyUnavailable(account.id, 'ccr')) {
             continue
           }
 
