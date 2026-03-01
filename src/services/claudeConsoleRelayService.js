@@ -1394,14 +1394,16 @@ class ClaudeConsoleRelayService {
   }
 
   // 🧪 测试账号连接（流式响应，供Admin API使用）
-  async testAccountConnection(accountId, responseStream) {
+  async testAccountConnection(accountId, responseStream, model = 'claude-haiku-4-5-20251001') {
     try {
       const account = await claudeConsoleAccountService.getAccount(accountId)
       if (!account) {
         throw new Error('Account not found')
       }
 
-      logger.info(`🧪 Testing Claude Console account connection: ${account.name} (${accountId})`)
+      logger.info(
+        `🧪 Testing Claude Console account connection: ${account.name} (${accountId}), model: ${model}`
+      )
 
       const cleanUrl = account.apiUrl.replace(/\/$/, '')
       const apiUrl = cleanUrl.endsWith('/v1/messages')
@@ -1412,6 +1414,7 @@ class ClaudeConsoleRelayService {
         apiUrl,
         authorization: `Bearer ${account.apiKey}`,
         responseStream,
+        payload: createClaudeTestPayload(model, { stream: true }),
         proxyAgent: claudeConsoleAccountService._createProxyAgent(account.proxy),
         extraHeaders: account.userAgent ? { 'User-Agent': account.userAgent } : {}
       })

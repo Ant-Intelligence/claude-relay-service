@@ -3439,10 +3439,11 @@ router.put(
 // 测试Claude OAuth账户连通性（流式响应）- 复用 claudeRelayService
 router.post('/claude-accounts/:accountId/test', authenticateAdmin, async (req, res) => {
   const { accountId } = req.params
+  const { model } = req.body || {}
 
   try {
     // 直接调用服务层的测试方法
-    await claudeRelayService.testAccountConnection(accountId, res)
+    await claudeRelayService.testAccountConnection(accountId, res, model)
   } catch (error) {
     logger.error(`❌ Failed to test Claude OAuth account:`, error)
     // 错误已在服务层处理，这里仅做日志记录
@@ -4016,10 +4017,11 @@ router.post('/claude-console-accounts/reset-all-usage', authenticateAdmin, async
 // 测试Claude Console账户连通性（流式响应）- 复用 claudeConsoleRelayService
 router.post('/claude-console-accounts/:accountId/test', authenticateAdmin, async (req, res) => {
   const { accountId } = req.params
+  const { model } = req.body || {}
 
   try {
     // 直接调用服务层的测试方法
-    await claudeConsoleRelayService.testAccountConnection(accountId, res)
+    await claudeConsoleRelayService.testAccountConnection(accountId, res, model)
   } catch (error) {
     logger.error(`❌ Failed to test Claude Console account:`, error)
     // 错误已在服务层处理，这里仅做日志记录
