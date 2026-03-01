@@ -667,6 +667,7 @@ async function handleMessages(req, res) {
           candidatesTokenCount: 0,
           totalTokenCount: 0
         }
+        let streamBuffer = ''
 
         geminiResponse.on('data', (chunk) => {
           try {
@@ -674,7 +675,18 @@ async function handleMessages(req, res) {
             res.write(chunkStr)
 
             // 尝试从 SSE 流中提取 usage 数据
-            const lines = chunkStr.split('\n')
+            streamBuffer += chunkStr
+
+            // 如果 buffer 过大，进行保护性清理（防止内存泄漏）
+            if (streamBuffer.length > 1024 * 1024) {
+              // 1MB
+              streamBuffer = streamBuffer.slice(-1024 * 64) // 只保留最后 64KB
+            }
+
+            const lines = streamBuffer.split('\n')
+            // 保留最后一行（可能不完整）
+            streamBuffer = lines.pop() || ''
+
             for (const line of lines) {
               if (line.startsWith('data:')) {
                 const data = line.substring(5).trim()
@@ -1674,55 +1686,53 @@ async function handleStreamGenerateContent(req, res) {
           res.write(chunk)
         }
 
-        // 异步提取 usage 数据
-        setImmediate(() => {
-          try {
-            const chunkStr = chunk.toString()
-            streamBuffer += chunkStr
+        // 提取 usage 数据
+        try {
+          const chunkStr = chunk.toString()
+          streamBuffer += chunkStr
 
-            // 如果 buffer 过大，进行保护性清理（防止内存泄漏）
-            if (streamBuffer.length > 1024 * 1024) {
-              // 1MB
-              streamBuffer = streamBuffer.slice(-1024 * 64) // 只保留最后 64KB
-            }
-
-            const lines = streamBuffer.split('\n')
-            // 保留最后一行（可能不完整）
-            streamBuffer = lines.pop() || ''
-
-            for (const line of lines) {
-              // 只处理可能包含数据的行
-              if (!line.trim() || !line.startsWith('data:')) {
-                continue
-              }
-
-              try {
-                // 尝试解析 SSE 行
-                const parsed = parseSSELine(line)
-
-                // 检查各种可能的 usage 位置
-                let extractedUsage = null
-
-                if (parsed.type === 'data') {
-                  if (parsed.data.response?.usageMetadata) {
-                    extractedUsage = parsed.data.response.usageMetadata
-                  } else if (parsed.data.usageMetadata) {
-                    extractedUsage = parsed.data.usageMetadata
-                  }
-                }
-
-                if (extractedUsage) {
-                  totalUsage = extractedUsage
-                  logger.debug('📊 Captured Gemini usage data:', totalUsage)
-                }
-              } catch (parseError) {
-                // 解析失败忽略，可能是非 JSON 数据
-              }
-            }
-          } catch (error) {
-            logger.warn('⚠️ Error extracting usage data:', error.message)
+          // 如果 buffer 过大，进行保护性清理（防止内存泄漏）
+          if (streamBuffer.length > 1024 * 1024) {
+            // 1MB
+            streamBuffer = streamBuffer.slice(-1024 * 64) // 只保留最后 64KB
           }
-        })
+
+          const lines = streamBuffer.split('\n')
+          // 保留最后一行（可能不完整）
+          streamBuffer = lines.pop() || ''
+
+          for (const line of lines) {
+            // 只处理可能包含数据的行
+            if (!line.trim() || !line.startsWith('data:')) {
+              continue
+            }
+
+            try {
+              // 尝试解析 SSE 行
+              const parsed = parseSSELine(line)
+
+              // 检查各种可能的 usage 位置
+              let extractedUsage = null
+
+              if (parsed.type === 'data') {
+                if (parsed.data.response?.usageMetadata) {
+                  extractedUsage = parsed.data.response.usageMetadata
+                } else if (parsed.data.usageMetadata) {
+                  extractedUsage = parsed.data.usageMetadata
+                }
+              }
+
+              if (extractedUsage) {
+                totalUsage = extractedUsage
+                logger.debug('📊 Captured Gemini usage data:', totalUsage)
+              }
+            } catch (parseError) {
+              // 解析失败忽略，可能是非 JSON 数据
+            }
+          }
+        } catch (error) {
+          logger.warn('⚠️ Error extracting usage data:', error.message)
+        }
       } catch (error) {
         logger.error('Error processing stream chunk:', error)
       }
@@ -2428,26 +2438,24 @@ async function handleStandardStreamGenerateContent(req, res) {
         res.write(outputChunk)
       }
 
-      setImmediate(() => {
-        try {
-          const usageSource =
-            processedPayload && processedPayload !== '[DONE]' ? processedPayload : dataPayload
+      try {
+        const usageSource =
+          processedPayload && processedPayload !== '[DONE]' ? processedPayload : dataPayload
 
-          if (!usageSource || !usageSource.includes('usageMetadata')) {
-            return
-          }
-
-          const usageObj = JSON.parse(usageSource)
-          const usage = usageObj.usageMetadata || usageObj.response?.usageMetadata || usageObj.usage
-
-          if (usage && typeof usage === 'object') {
-            totalUsage = usage
-            logger.debug('📊 Captured Gemini usage data (async):', totalUsage)
-          }
-        } catch (error) {
-          // 提取用量失败时忽略
+        if (!usageSource || !usageSource.includes('usageMetadata')) {
+          return
         }
-      })
+
+        const usageObj = JSON.parse(usageSource)
+        const usage = usageObj.usageMetadata || usageObj.response?.usageMetadata || usageObj.usage
+
+        if (usage && typeof usage === 'object') {
+          totalUsage = usage
+          logger.debug('📊 Captured Gemini usage data:', totalUsage)
+        }
+      } catch (error) {
+        // 提取用量失败时忽略
+      }
     }
 
     streamResponse.on('data', (chunk) => {
