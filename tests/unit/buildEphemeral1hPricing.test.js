@@ -99,7 +99,7 @@ describe('buildEphemeral1hPricing', () => {
     expect(pricingService.ephemeral1hPricing['anthropic.claude-opus-4-6']).toBeUndefined()
     expect(pricingService.ephemeral1hPricing['azure_ai/claude-sonnet-4']).toBeUndefined()
     expect(pricingService.ephemeral1hPricing['vertex_ai/claude-sonnet-4']).toBeUndefined()
-    expect(Object.keys(pricingService.ephemeral1hPricing)).toHaveLength(2)
+    expect(Object.keys(pricingService.ephemeral1hPricing)).toHaveLength(1)
   })
 
   test('does nothing when pricingData is null', () => {
