@@ -201,6 +201,12 @@ const authenticateApiKey = async (req, res, next) => {
       )
     }
 
+    // 提高监听器上限，避免 MaxListenersExceededWarning
+    // 请求生命周期中多个中间件和服务会注册 close/error/finish 监听器（并发追踪、资源清理、日志等），
+    // 这些监听器随请求对象结束后被 GC 回收，不是内存泄漏
+    req.setMaxListeners(20)
+    res.setMaxListeners(20)
+
     // 检查并发限制
     const concurrencyLimit = validation.keyData.concurrencyLimit || 0
     if (!skipKeyRestrictions && concurrencyLimit > 0) {
