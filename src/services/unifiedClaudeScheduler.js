@@ -326,19 +326,19 @@ class UnifiedClaudeScheduler {
         false // 仅前缀才走 CCR：默认池不包含 CCR 账户
       )
 
-      // claude-official 会话不兼容 console 账户，失效后只允许切换到同类账户
-      if (previousAccountType === 'claude-official') {
-        const sameTypeAccounts = availableAccounts.filter(
-          (a) => a.accountType === 'claude-official'
+      // claude-console 会话不能降级到 claude-official（协议不兼容），排除 official 账户
+      if (previousAccountType === 'claude-console') {
+        const nonOfficialAccounts = availableAccounts.filter(
+          (a) => a.accountType !== 'claude-official'
         )
-        if (sameTypeAccounts.length === 0) {
+        if (nonOfficialAccounts.length === 0) {
           throw new Error(
-            'No available Claude Official accounts to replace the failed session (Console accounts are not session-compatible)'
+            'No available Claude Console/Bedrock/CCR accounts to replace the failed Console session (Official accounts are not compatible)'
           )
         }
-        availableAccounts = sameTypeAccounts
+        availableAccounts = nonOfficialAccounts
         logger.info(
-          `🔒 Session was claude-official, filtered to ${sameTypeAccounts.length} same-type account(s)`
+          `🔒 Session was claude-console, excluded claude-official; ${nonOfficialAccounts.length} account(s) remaining`
         )
       }
 
