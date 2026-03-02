@@ -1290,7 +1290,7 @@ const commonModels = ref([
   'claude-sonnet-4-5-20250929',
   'claude-sonnet-4-6',
   'claude-opus-4-5-20251101',
-  'claude-opus-4-6-20260205'
+  'claude-opus-4-6'
 ])
 
 // 可用的快捷模型（过滤掉已在限制列表中的）

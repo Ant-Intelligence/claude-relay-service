@@ -82,9 +82,6 @@ describe('buildEphemeral1hPricing', () => {
       'claude-opus-4-6': {
         cache_creation_input_token_cost_above_1hr: 0.00001
       },
-      'claude-opus-4-6-20260205': {
-        cache_creation_input_token_cost_above_1hr: 0.00001
-      },
       'anthropic.claude-opus-4-6': {
         cache_creation_input_token_cost_above_1hr: 0.00001
       },
@@ -99,7 +96,6 @@ describe('buildEphemeral1hPricing', () => {
     pricingService.buildEphemeral1hPricing()
 
     expect(pricingService.ephemeral1hPricing['claude-opus-4-6']).toBe(0.00001)
-    expect(pricingService.ephemeral1hPricing['claude-opus-4-6-20260205']).toBe(0.00001)
     expect(pricingService.ephemeral1hPricing['anthropic.claude-opus-4-6']).toBeUndefined()
     expect(pricingService.ephemeral1hPricing['azure_ai/claude-sonnet-4']).toBeUndefined()
     expect(pricingService.ephemeral1hPricing['vertex_ai/claude-sonnet-4']).toBeUndefined()

@@ -34,10 +34,6 @@ class ModelService {
         display_name: 'Claude 4.6 Opus',
         created_at: '2026-02-05T00:00:00Z'
       },
-      'claude-opus-4-6-20260205': {
-        display_name: 'Claude 4.6 Opus',
-        created_at: '2026-02-05T00:00:00Z'
-      },
       'claude-sonnet-4-6': {
         display_name: 'Claude 4.6 Sonnet',
         created_at: '2026-02-18T00:00:00Z'
