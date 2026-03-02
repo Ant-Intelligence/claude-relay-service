@@ -2356,7 +2356,10 @@ class ApiKeyService {
         geminiAccountService.getAllAccounts().catch(() => []),
         geminiApiAccountService.getAllAccounts(true).catch(() => []),
         openaiResponsesAccountService.getAllAccounts(true).catch(() => []),
-        bedrockAccountService.getAllAccounts().catch(() => []),
+        bedrockAccountService
+          .getAllAccounts()
+          .then((result) => (Array.isArray(result) ? result : result?.data || []))
+          .catch(() => []),
         droidAccountService.getAllAccounts().catch(() => []),
         azureOpenaiAccountService.getAllAccounts().catch(() => []),
         accountGroupService.getAllGroups().catch(() => [])
