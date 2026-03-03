@@ -83,7 +83,7 @@ router.get('/api-keys/:keyId/cost-debug', authenticateAdmin, async (req, res) =>
     const client = redis.getClientSafe()
 
     // 获取所有相关的Redis键
-    const costKeys = await client.keys(`usage:cost:*:${keyId}:*`)
+    const costKeys = await redis.scanKeys(`usage:cost:*:${keyId}:*`)
     const keyValues = {}
 
     for (const key of costKeys) {

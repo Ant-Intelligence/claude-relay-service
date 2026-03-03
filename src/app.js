@@ -430,8 +430,8 @@ class Application {
     try {
       const client = redis.getClient()
 
-      // 获取所有 session:* 键
-      const sessionKeys = await client.keys('session:*')
+      // 获取所有 session:* 键（使用 SCAN 避免阻塞）
+      const sessionKeys = await redis.scanKeys('session:*')
 
       let validCount = 0
       let invalidCount = 0
@@ -697,6 +697,68 @@ class Application {
     }, 60000) // 每分钟执行一次
 
     logger.info('🔢 Concurrency cleanup task started (running every 1 minute)')
+
+    // 🧹 一次性清理僵尸 system:metrics:minute:* key（TTL 为 -1 的遗留数据）
+    this.cleanupZombieMetricsKeys()
+  }
+
+  async cleanupZombieMetricsKeys() {
+    try {
+      const client = redis.getClient()
+      let cursor = '0'
+      let totalDeleted = 0
+      const batchSize = 200
+
+      do {
+        const [nextCursor, keys] = await client.scan(
+          cursor,
+          'MATCH',
+          'system:metrics:minute:*',
+          'COUNT',
+          batchSize
+        )
+        cursor = nextCursor
+
+        if (keys.length === 0) {
+          continue
+        }
+
+        // 批量检查 TTL，只删除 TTL 为 -1（永不过期）的 key
+        const pipeline = client.pipeline()
+        for (const key of keys) {
+          pipeline.ttl(key)
+        }
+        const ttlResults = await pipeline.exec()
+
+        const keysToDelete = []
+        for (let i = 0; i < keys.length; i++) {
+          const [err, ttl] = ttlResults[i]
+          if (!err && ttl === -1) {
+            keysToDelete.push(keys[i])
+          }
+        }
+
+        if (keysToDelete.length > 0) {
+          await client.del(...keysToDelete)
+          totalDeleted += keysToDelete.length
+        }
+
+        // 批间延迟，避免阻塞 Redis
+        if (cursor !== '0') {
+          await new Promise((resolve) => setTimeout(resolve, 10))
+        }
+      } while (cursor !== '0')
+
+      if (totalDeleted > 0) {
+        logger.info(
+          `🧹 Zombie metrics cleanup: deleted ${totalDeleted} system:metrics:minute:* keys with no TTL`
+        )
+      } else {
+        logger.info('🧹 Zombie metrics cleanup: no zombie keys found')
+      }
+    } catch (error) {
+      logger.error('❌ Zombie metrics cleanup failed:', error)
+    }
   }
 
   setupGracefulShutdown() {

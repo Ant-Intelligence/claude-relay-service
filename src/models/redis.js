@@ -542,7 +542,7 @@ class RedisClient {
 
     // 系统级分钟统计的过期时间（窗口时间的2倍）
     const configLocal = require('../../config/config')
-    const { metricsWindow } = configLocal.system
+    const metricsWindow = configLocal.system.metricsWindow || 5
     pipeline.expire(systemMinuteKey, metricsWindow * 60 * 2)
 
     // 执行Pipeline
@@ -3250,7 +3250,7 @@ class RedisClient {
   // 获取所有启用测试的账户
   async getEnabledTestAccounts(platform) {
     const pattern = `account:test_config:${platform}:*`
-    const keys = await this.client.keys(pattern)
+    const keys = await this.scanKeys(pattern)
 
     const enabledAccounts = []
 

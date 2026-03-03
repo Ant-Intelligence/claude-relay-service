@@ -1396,7 +1396,29 @@ class UnifiedClaudeScheduler {
     }
   }
 
-  // 🚫 标记Claude Console账户为封锁状态（模型不支持）
+  // ⏱️ 批量检查多个账户是否被标记为临时不可用（使用 MGET 减少 Redis 调用）
+  async batchCheckTemporarilyUnavailable(accountIds) {
+    if (!accountIds?.length) {
+      return new Set()
+    }
+    try {
+      const client = redis.getClientSafe()
+      const keys = accountIds.map((id) => `temp_unavailable:${id}`)
+      const values = await client.mget(...keys)
+      const unavailable = new Set()
+      accountIds.forEach((id, i) => {
+        if (values[i]) {
+          unavailable.add(id)
+        }
+      })
+      return unavailable
+    } catch (error) {
+      logger.warn(`⚠️ Failed to batch check temp unavailability: ${error.message}`)
+      return new Set()
+    }
+  }
+
+  // 🚫 标���Claude Console账户为封锁状态（模型不支持）
   async blockConsoleAccount(accountId, reason) {
     try {
       await claudeConsoleAccountService.blockAccount(accountId, reason)
@@ -1483,6 +1505,9 @@ class UnifiedClaudeScheduler {
         `📋 Group ${group.name} has ${memberIds.length} members: [${memberIds.join(', ')}]`
       )
 
+      // 批量预取临时不可用状态（MGET 代替逐个 GET）
+      const tempUnavailableSet = await this.batchCheckTemporarilyUnavailable(memberIds)
+
       const availableAccounts = []
       const skippedReasons = [] // Track why accounts were skipped
       const isOpusRequest =
@@ -1567,9 +1592,9 @@ class UnifiedClaudeScheduler {
         }
 
         if (isActive && statusOk && isSchedulable) {
-          // 检查是否临时不可用
-          if (await this.isAccountTemporarilyUnavailable(account.id, accountType)) {
-            logger.info(`   └─ ⚠️ Skipped: temp_unavailable`)
+          // 检查是否临时不可用（使用批量预取结果）
+          if (tempUnavailableSet.has(account.id)) {
+            logger.info(`   └─ ⚠️ Skipped: temp_unavailable (account ${account.id} ${accountType})`)
             skippedReasons.push({
               memberId,
               accountName: account.name,
@@ -1782,6 +1807,18 @@ class UnifiedClaudeScheduler {
       const ccrAccounts = await ccrAccountService.getAllAccounts()
       logger.debug(`📋 Found ${ccrAccounts.length} total CCR accounts for CCR-only selection`)
 
+      // 批量预取临时不可用状态（MGET 代替逐个 GET）
+      const eligibleCcrIds = ccrAccounts
+        .filter(
+          (a) =>
+            a.isActive === true &&
+            a.status === 'active' &&
+            a.accountType === 'shared' &&
+            this._isSchedulable(a.schedulable)
+        )
+        .map((a) => a.id)
+      const tempUnavailableSet = await this.batchCheckTemporarilyUnavailable(eligibleCcrIds)
+
       for (const account of ccrAccounts) {
         logger.debug(
           `🔍 Checking CCR account: ${account.name} - isActive: ${account.isActive}, status: ${account.status}, accountType: ${account.accountType}, schedulable: ${account.schedulable}`
@@ -1799,8 +1836,8 @@ class UnifiedClaudeScheduler {
             continue
           }
 
-          // 检查是否临时不可用
-          if (await this.isAccountTemporarilyUnavailable(account.id, 'ccr')) {
+          // 检查是否临时不可用（使用批量预取结果）
+          if (tempUnavailableSet.has(account.id)) {
             continue
           }
 

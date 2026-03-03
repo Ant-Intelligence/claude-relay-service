@@ -38,6 +38,11 @@ const apiKeyRegenerateRoutes = require('./admin/apiKeyRegenerate')
 
 const router = express.Router()
 
+// Dashboard 响应缓存（30 秒 TTL，减少高频 SCAN/HGETALL 调用）
+let dashboardCache = null
+let dashboardCacheTime = 0
+const DASHBOARD_CACHE_TTL = 30000 // 30 秒
+
 // 挂载 API Key 重新生成路由
 router.use('/', apiKeyRegenerateRoutes)
 
@@ -347,44 +352,9 @@ router.get('/api-keys', authenticateAdmin, async (req, res) => {
       const client = redis.getClientSafe()
 
       if (timeRange === 'all') {
-        // 全部时间：保持原有逻辑
+        // 全部时间：使用 index + pipeline 代替 SCAN
         if (apiKey.usage && apiKey.usage.total) {
-          // 使用与展开模型统计相同的数据源
-          // 获取所有时间的模型统计数据
-          const monthlyKeys = await redis.scanKeys(`usage:${apiKey.id}:model:monthly:*:*`)
-          const modelStatsMap = new Map()
-
-          // 汇总所有月份的数据
-          for (const key of monthlyKeys) {
-            const match = key.match(/usage:.+:model:monthly:(.+):\d{4}-\d{2}$/)
-            if (!match) {
-              continue
-            }
-
-            const model = match[1]
-            const data = await client.hgetall(key)
-
-            if (data && Object.keys(data).length > 0) {
-              if (!modelStatsMap.has(model)) {
-                modelStatsMap.set(model, {
-                  inputTokens: 0,
-                  outputTokens: 0,
-                  cacheCreateTokens: 0,
-                  cacheReadTokens: 0
-                })
-              }
-
-              const stats = modelStatsMap.get(model)
-              stats.inputTokens +=
-                parseInt(data.totalInputTokens) || parseInt(data.inputTokens) || 0
-              stats.outputTokens +=
-                parseInt(data.totalOutputTokens) || parseInt(data.outputTokens) || 0
-              stats.cacheCreateTokens +=
-                parseInt(data.totalCacheCreateTokens) || parseInt(data.cacheCreateTokens) || 0
-              stats.cacheReadTokens +=
-                parseInt(data.totalCacheReadTokens) || parseInt(data.cacheReadTokens) || 0
-            }
-          }
+          const modelStatsMap = await redis.getApiKeyModelStats(apiKey.id, 'all')
 
           let totalCost = 0
 
@@ -821,43 +791,9 @@ router.get('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
 
     // 计算准确的费用和统计数据（client已在上面定义）
     if (timeRange === 'all') {
-      // 全部时间：保持原有逻辑
+      // 全部时间：使用 index + pipeline 代替 SCAN
       if (apiKey.usage && apiKey.usage.total) {
-        // 使用与展开模型统计相同的数据源
-        // 获取所有时间的模型统计数据
-        const monthlyKeys = await redis.scanKeys(`usage:${apiKey.id}:model:monthly:*:*`)
-        const modelStatsMap = new Map()
-
-        // 汇总所有月份的数据
-        for (const key of monthlyKeys) {
-          const match = key.match(/usage:.+:model:monthly:(.+):\d{4}-\d{2}$/)
-          if (!match) {
-            continue
-          }
-
-          const model = match[1]
-          const data = await client.hgetall(key)
-
-          if (data && Object.keys(data).length > 0) {
-            if (!modelStatsMap.has(model)) {
-              modelStatsMap.set(model, {
-                inputTokens: 0,
-                outputTokens: 0,
-                cacheCreateTokens: 0,
-                cacheReadTokens: 0
-              })
-            }
-
-            const stats = modelStatsMap.get(model)
-            stats.inputTokens += parseInt(data.totalInputTokens) || parseInt(data.inputTokens) || 0
-            stats.outputTokens +=
-              parseInt(data.totalOutputTokens) || parseInt(data.outputTokens) || 0
-            stats.cacheCreateTokens +=
-              parseInt(data.totalCacheCreateTokens) || parseInt(data.cacheCreateTokens) || 0
-            stats.cacheReadTokens +=
-              parseInt(data.totalCacheReadTokens) || parseInt(data.cacheReadTokens) || 0
-          }
-        }
+        const modelStatsMap = await redis.getApiKeyModelStats(apiKey.id, 'all')
 
         let totalCost = 0
 
@@ -5856,6 +5792,11 @@ router.get('/accounts/:accountId/usage-history', authenticateAdmin, async (req, 
 // 获取系统概览
 router.get('/dashboard', authenticateAdmin, async (req, res) => {
   try {
+    // 检查缓存（30 秒 TTL）
+    if (dashboardCache && Date.now() - dashboardCacheTime < DASHBOARD_CACHE_TTL) {
+      return res.json({ success: true, data: dashboardCache })
+    }
+
     const [
       ,
       apiKeys,
@@ -5872,7 +5813,7 @@ router.get('/dashboard', authenticateAdmin, async (req, res) => {
       realtimeMetrics
     ] = await Promise.all([
       redis.getSystemStats(),
-      apiKeyService.getAllApiKeys(),
+      apiKeyService.getAllApiKeysForDashboard(),
       // Dashboard 只需要基本信息，使用 skipExtendedInfo 跳过额外的 Redis 查询（限流状态、会话窗口等）
       claudeAccountService.getAllAccounts({ skipExtendedInfo: true }),
       claudeConsoleAccountService.getAllAccounts({ skipExtendedInfo: true }),
@@ -6192,6 +6133,10 @@ router.get('/dashboard', authenticateAdmin, async (req, res) => {
       },
       systemTimezone: config.system.timezoneOffset || 8
     }
+
+    // 缓存 dashboard 结果（30 秒 TTL）
+    dashboardCache = dashboard
+    dashboardCacheTime = Date.now()
 
     return res.json({ success: true, data: dashboard })
   } catch (error) {

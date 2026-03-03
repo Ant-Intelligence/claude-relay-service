@@ -572,6 +572,32 @@ class ApiKeyService {
     }
   }
 
+  // 📋 获取所有API Keys（轻量版，用于 Dashboard）
+  // 使用 index 代替 SCAN，仅获取 usage stats，跳过完整 enrichment
+  async getAllApiKeysForDashboard() {
+    try {
+      let apiKeys = await redis.getAllApiKeysFromIndex()
+
+      // 过滤掉已删除的API Keys
+      apiKeys = apiKeys.filter((key) => key.isDeleted !== 'true')
+
+      // 仅获取 usage stats（3 个 HGETALL/key），不做完整 enrichment（9+ Redis 调用/key）
+      await Promise.all(
+        apiKeys.map(async (key) => {
+          const usage = await redis.getUsageStats(key.id)
+          key.usage = usage
+          key.isActive = key.isActive === 'true' || key.isActive === true
+          delete key.apiKey
+        })
+      )
+
+      return apiKeys
+    } catch (error) {
+      logger.error('❌ Failed to get API keys for dashboard:', error)
+      throw error
+    }
+  }
+
   // 🔧 辅助方法：丰富单个API Key的详细数据
   async _enrichApiKey(key, client, accountInfoCache) {
     try {
