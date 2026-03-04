@@ -1654,9 +1654,11 @@ class ApiKeyService {
       const newApiKey = `${this.prefix}${this._generateSecretKey()}`
       const newHashedKey = this._hashApiKey(newApiKey)
 
-      // 删除旧的哈希映射
+      // 删除旧的哈希映射（从两个地方删除）
       const oldHashedKey = existingKey.apiKey
-      await redis.deleteApiKeyHash(oldHashedKey)
+      await redis.deleteApiKeyHash(oldHashedKey)  // 删除 ap ikey_hash:{oldHashedKey}
+      // CRITICAL FIX: 同时从 hash_map 中删除，否则旧 key 仍然可用！
+      await redis.getClient().hdel('apikey:hash_map', oldHashedKey)
 
       // 更新key数据
       const updatedKeyData = {
