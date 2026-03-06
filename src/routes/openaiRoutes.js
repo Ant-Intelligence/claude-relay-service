@@ -895,7 +895,9 @@ router.get('/v1/models', authenticateApiKey, async (req, res) => {
 
     // OpenAI Responses (Codex) 支持的模型列表
     const openaiModels = [
-      // GPT-5.2 系列（最新）
+      // GPT-5.4 系列（最新）
+      { id: 'gpt-5.4', object: 'model', created: 1741392000, owned_by: 'openai' },
+      // GPT-5.3 系列
       { id: 'gpt-5.3-codex', object: 'model', created: 1738713600, owned_by: 'openai' },
       // GPT-5.2 系列
       { id: 'gpt-5.2-2025-12-11', object: 'model', created: 1733875200, owned_by: 'openai' },
@@ -983,7 +985,9 @@ router.get('/v1/models/:model', authenticateApiKey, async (req, res) => {
 
     // 支持的模型列表 - 从模型ID查找created时间戳
     const modelCreatedMap = {
-      // GPT-5.2 系列
+      // GPT-5.4 系列（最新）
+      'gpt-5.4': 1741392000,
+      // GPT-5.3 系列
       'gpt-5.3-codex': 1738713600,
       // GPT-5.2 系列
       'gpt-5.2-2025-12-11': 1733875200,

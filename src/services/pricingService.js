@@ -400,6 +400,15 @@ class PricingService {
       }
     }
 
+    // 特殊处理：gpt-5.4 回退到 gpt-5.3-codex 或 gpt-5（OpenAI 尚未公布 gpt-5.4 API 定价）
+    if (modelName === 'gpt-5.4' && !this.pricingData['gpt-5.4']) {
+      const fallbackPricing = this.pricingData['gpt-5.3-codex'] || this.pricingData['gpt-5']
+      if (fallbackPricing) {
+        logger.info(`💰 Using gpt-5.3-codex/gpt-5 pricing as fallback for ${modelName}`)
+        return fallbackPricing
+      }
+    }
+
     // 特殊处理：gpt-5.3-codex 回退到 gpt-5.2-codex（OpenAI 尚未公布 gpt-5.3-codex API 定价）
     if (modelName === 'gpt-5.3-codex' && !this.pricingData['gpt-5.3-codex']) {
       const fallbackPricing = this.pricingData['gpt-5.2-codex']
