@@ -666,10 +666,49 @@
                   />
                   <span class="text-sm text-gray-700 dark:text-gray-300">分组调度</span>
                 </label>
+                <label class="flex cursor-pointer items-center">
+                  <input
+                    v-model="form.accountType"
+                    class="mr-2 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                    type="radio"
+                    value="stable"
+                  />
+                  <span class="text-sm text-gray-700 dark:text-gray-300">稳定账户</span>
+                </label>
               </div>
               <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 共享账户：供所有API Key使用；专属账户：仅供特定API
-                Key使用；分组调度：加入分组供分组内调度
+                Key使用；分组调度：加入分组供分组内调度；稳定账户：限制并发会话数的共享账户
+              </p>
+            </div>
+
+            <!-- 稳定账户配置 -->
+            <div v-if="form.accountType === 'stable'">
+              <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
+                >最大会话数</label
+              >
+              <input
+                v-model.number="form.maxStableSessions"
+                class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                min="1"
+                type="number"
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                同时允许的最大并发会话数，默认为 1
+              </p>
+            </div>
+            <div v-if="form.accountType === 'stable'">
+              <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
+                >不活跃超时（分钟）</label
+              >
+              <input
+                v-model.number="form.stableInactivityMinutes"
+                class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                min="0"
+                type="number"
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                会话超过此时长无请求后，其槽位可被新会话占用，默认为 5 分钟
               </p>
             </div>
 
@@ -2402,10 +2441,49 @@
                 />
                 <span class="text-sm text-gray-700 dark:text-gray-300">分组调度</span>
               </label>
+              <label class="flex cursor-pointer items-center">
+                <input
+                  v-model="form.accountType"
+                  class="mr-2 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                  type="radio"
+                  value="stable"
+                />
+                <span class="text-sm text-gray-700 dark:text-gray-300">稳定账户</span>
+              </label>
             </div>
             <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
               共享账户：供所有API Key使用；专属账户：仅供特定API
-              Key使用；分组调度：加入分组供分组内调度
+              Key使用；分组调度：加入分组供分组内调度；稳定账户：限制并发会话数的共享账户
+            </p>
+          </div>
+
+          <!-- 稳定账户配置 -->
+          <div v-if="form.accountType === 'stable'">
+            <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
+              >最大会话数</label
+            >
+            <input
+              v-model.number="form.maxStableSessions"
+              class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+              min="1"
+              type="number"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              同时允许的最大并发会话数，默认为 1
+            </p>
+          </div>
+          <div v-if="form.accountType === 'stable'">
+            <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
+              >不活跃超时（分钟）</label
+            >
+            <input
+              v-model.number="form.stableInactivityMinutes"
+              class="form-input w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+              min="0"
+              type="number"
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              会话超过此时长无请求后，其槽位可被新会话占用，默认为 5 分钟
             </p>
           </div>
 
@@ -3972,6 +4050,9 @@ const form = ref({
   quotaResetTime: props.account?.quotaResetTime || '00:00',
   // 并发控制字段
   maxConcurrentTasks: props.account?.maxConcurrentTasks || 0,
+  // 稳定账户字段
+  maxStableSessions: props.account?.maxStableSessions || 1,
+  stableInactivityMinutes: props.account?.stableInactivityMinutes ?? 5,
   // Bedrock 特定字段
   accessKeyId: props.account?.accessKeyId || '',
   secretAccessKey: props.account?.secretAccessKey || '',
@@ -4547,7 +4628,13 @@ const buildClaudeAccountData = (tokenInfo, accountName, clientId) => {
       hasClaudeMax: form.value.subscriptionType === 'claude_max',
       hasClaudePro: form.value.subscriptionType === 'claude_pro',
       manuallySet: true
-    }
+    },
+    ...(form.value.accountType === 'stable'
+      ? {
+          maxStableSessions: form.value.maxStableSessions || 1,
+          stableInactivityMinutes: form.value.stableInactivityMinutes ?? 5
+        }
+      : {})
   }
 
   // 处理 extInfo
@@ -5095,6 +5182,11 @@ const createAccount = async () => {
       data.quotaResetTime = form.value.quotaResetTime || '00:00'
       // 并发控制字段
       data.maxConcurrentTasks = form.value.maxConcurrentTasks || 0
+      // 稳定账户字段
+      if (form.value.accountType === 'stable') {
+        data.maxStableSessions = form.value.maxStableSessions || 1
+        data.stableInactivityMinutes = form.value.stableInactivityMinutes ?? 5
+      }
     } else if (form.value.platform === 'openai-responses') {
       // OpenAI-Responses 账户特定数据
       data.baseApi = form.value.baseApi
@@ -5249,7 +5341,13 @@ const updateAccount = async () => {
       groupId: form.value.accountType === 'group' ? form.value.groupId : undefined,
       groupIds: form.value.accountType === 'group' ? form.value.groupIds : undefined,
       expiresAt: form.value.expiresAt || undefined,
-      proxy: proxyPayload
+      proxy: proxyPayload,
+      ...(form.value.accountType === 'stable'
+        ? {
+            maxStableSessions: form.value.maxStableSessions || 1,
+            stableInactivityMinutes: form.value.stableInactivityMinutes ?? 5
+          }
+        : {})
     }
 
     // 只有非空时才更新token
@@ -5419,6 +5517,9 @@ const updateAccount = async () => {
       data.quotaResetTime = form.value.quotaResetTime || '00:00'
       // 并发控制字段
       data.maxConcurrentTasks = form.value.maxConcurrentTasks || 0
+      // 稳定账户字段
+      data.maxStableSessions = form.value.maxStableSessions || 1
+      data.stableInactivityMinutes = form.value.stableInactivityMinutes ?? 5
     }
 
     // OpenAI-Responses 特定更新

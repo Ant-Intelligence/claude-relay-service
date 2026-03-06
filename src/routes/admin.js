@@ -3073,10 +3073,10 @@ router.post('/claude-accounts', authenticateAdmin, async (req, res) => {
     }
 
     // 验证accountType的有效性
-    if (accountType && !['shared', 'dedicated', 'group'].includes(accountType)) {
+    if (accountType && !['shared', 'dedicated', 'group', 'stable'].includes(accountType)) {
       return res
         .status(400)
-        .json({ error: 'Invalid account type. Must be "shared", "dedicated" or "group"' })
+        .json({ error: 'Invalid account type. Must be "shared", "dedicated", "group" or "stable"' })
     }
 
     // 如果是分组类型，验证groupId或groupIds
@@ -3092,6 +3092,23 @@ router.post('/claude-accounts', authenticateAdmin, async (req, res) => {
       (typeof priority !== 'number' || priority < 1 || priority > 100)
     ) {
       return res.status(400).json({ error: 'Priority must be a number between 1 and 100' })
+    }
+
+    // 验证稳定账户参数
+    const { maxStableSessions, stableInactivityMinutes } = req.body
+    if (maxStableSessions !== undefined && maxStableSessions !== null) {
+      const val = Number(maxStableSessions)
+      if (!Number.isInteger(val) || val < 1) {
+        return res.status(400).json({ error: 'maxStableSessions must be a positive integer' })
+      }
+    }
+    if (stableInactivityMinutes !== undefined && stableInactivityMinutes !== null) {
+      const val = Number(stableInactivityMinutes)
+      if (!Number.isInteger(val) || val < 0) {
+        return res
+          .status(400)
+          .json({ error: 'stableInactivityMinutes must be a non-negative integer' })
+      }
     }
 
     const newAccount = await claudeAccountService.createAccount({
@@ -3110,7 +3127,15 @@ router.post('/claude-accounts', authenticateAdmin, async (req, res) => {
       useUnifiedClientId: useUnifiedClientId === true, // 默认为false
       unifiedClientId: unifiedClientId || '', // 统一的客户端标识
       expiresAt: expiresAt || null, // 账户订阅到期时间
-      extInfo: extInfo || null
+      extInfo: extInfo || null,
+      maxStableSessions:
+        maxStableSessions !== undefined && maxStableSessions !== null
+          ? Number(maxStableSessions)
+          : 1,
+      stableInactivityMinutes:
+        stableInactivityMinutes !== undefined && stableInactivityMinutes !== null
+          ? Number(stableInactivityMinutes)
+          : 5
     })
 
     // 如果是分组类型，将账户添加到分组
@@ -3157,11 +3182,11 @@ router.put('/claude-accounts/:accountId', authenticateAdmin, async (req, res) =>
     // 验证accountType的有效性
     if (
       mappedUpdates.accountType &&
-      !['shared', 'dedicated', 'group'].includes(mappedUpdates.accountType)
+      !['shared', 'dedicated', 'group', 'stable'].includes(mappedUpdates.accountType)
     ) {
       return res
         .status(400)
-        .json({ error: 'Invalid account type. Must be "shared", "dedicated" or "group"' })
+        .json({ error: 'Invalid account type. Must be "shared", "dedicated", "group" or "stable"' })
     }
 
     // 如果更新为分组类型，验证groupId或groupIds
@@ -3173,6 +3198,27 @@ router.put('/claude-accounts/:accountId', authenticateAdmin, async (req, res) =>
       return res
         .status(400)
         .json({ error: 'Group ID or Group IDs are required for group type accounts' })
+    }
+
+    // 验证稳定账户参数
+    if (mappedUpdates.maxStableSessions !== undefined && mappedUpdates.maxStableSessions !== null) {
+      const val = Number(mappedUpdates.maxStableSessions)
+      if (!Number.isInteger(val) || val < 1) {
+        return res.status(400).json({ error: 'maxStableSessions must be a positive integer' })
+      }
+      mappedUpdates.maxStableSessions = val
+    }
+    if (
+      mappedUpdates.stableInactivityMinutes !== undefined &&
+      mappedUpdates.stableInactivityMinutes !== null
+    ) {
+      const val = Number(mappedUpdates.stableInactivityMinutes)
+      if (!Number.isInteger(val) || val < 0) {
+        return res
+          .status(400)
+          .json({ error: 'stableInactivityMinutes must be a non-negative integer' })
+      }
+      mappedUpdates.stableInactivityMinutes = val
     }
 
     // 获取账户当前信息以处理分组变更
@@ -3635,15 +3681,35 @@ router.post('/claude-console-accounts', authenticateAdmin, async (req, res) => {
     }
 
     // 验证accountType的有效性
-    if (accountType && !['shared', 'dedicated', 'group'].includes(accountType)) {
+    if (accountType && !['shared', 'dedicated', 'group', 'stable'].includes(accountType)) {
       return res
         .status(400)
-        .json({ error: 'Invalid account type. Must be "shared", "dedicated" or "group"' })
+        .json({ error: 'Invalid account type. Must be "shared", "dedicated", "group" or "stable"' })
     }
 
     // 如果是分组类型，验证groupId
     if (accountType === 'group' && !groupId) {
       return res.status(400).json({ error: 'Group ID is required for group type accounts' })
+    }
+
+    // 验证稳定账户参数
+    const {
+      maxStableSessions: consoleMaxStableSessions,
+      stableInactivityMinutes: consoleStableInactivityMinutes
+    } = req.body
+    if (consoleMaxStableSessions !== undefined && consoleMaxStableSessions !== null) {
+      const val = Number(consoleMaxStableSessions)
+      if (!Number.isInteger(val) || val < 1) {
+        return res.status(400).json({ error: 'maxStableSessions must be a positive integer' })
+      }
+    }
+    if (consoleStableInactivityMinutes !== undefined && consoleStableInactivityMinutes !== null) {
+      const val = Number(consoleStableInactivityMinutes)
+      if (!Number.isInteger(val) || val < 0) {
+        return res
+          .status(400)
+          .json({ error: 'stableInactivityMinutes must be a non-negative integer' })
+      }
     }
 
     const newAccount = await claudeConsoleAccountService.createAccount({
@@ -3663,7 +3729,15 @@ router.post('/claude-console-accounts', authenticateAdmin, async (req, res) => {
       maxConcurrentTasks:
         maxConcurrentTasks !== undefined && maxConcurrentTasks !== null
           ? Number(maxConcurrentTasks)
-          : 0
+          : 0,
+      maxStableSessions:
+        consoleMaxStableSessions !== undefined && consoleMaxStableSessions !== null
+          ? Number(consoleMaxStableSessions)
+          : 1,
+      stableInactivityMinutes:
+        consoleStableInactivityMinutes !== undefined && consoleStableInactivityMinutes !== null
+          ? Number(consoleStableInactivityMinutes)
+          : 5
     })
 
     // 如果是分组类型，将账户添加到分组（CCR 归属 Claude 平台分组）
@@ -3715,16 +3789,37 @@ router.put('/claude-console-accounts/:accountId', authenticateAdmin, async (req,
     // 验证accountType的有效性
     if (
       mappedUpdates.accountType &&
-      !['shared', 'dedicated', 'group'].includes(mappedUpdates.accountType)
+      !['shared', 'dedicated', 'group', 'stable'].includes(mappedUpdates.accountType)
     ) {
       return res
         .status(400)
-        .json({ error: 'Invalid account type. Must be "shared", "dedicated" or "group"' })
+        .json({ error: 'Invalid account type. Must be "shared", "dedicated", "group" or "stable"' })
     }
 
     // 如果更新为分组类型，验证groupId
     if (mappedUpdates.accountType === 'group' && !mappedUpdates.groupId) {
       return res.status(400).json({ error: 'Group ID is required for group type accounts' })
+    }
+
+    // 验证稳定账户参数
+    if (mappedUpdates.maxStableSessions !== undefined && mappedUpdates.maxStableSessions !== null) {
+      const val = Number(mappedUpdates.maxStableSessions)
+      if (!Number.isInteger(val) || val < 1) {
+        return res.status(400).json({ error: 'maxStableSessions must be a positive integer' })
+      }
+      mappedUpdates.maxStableSessions = val
+    }
+    if (
+      mappedUpdates.stableInactivityMinutes !== undefined &&
+      mappedUpdates.stableInactivityMinutes !== null
+    ) {
+      const val = Number(mappedUpdates.stableInactivityMinutes)
+      if (!Number.isInteger(val) || val < 0) {
+        return res
+          .status(400)
+          .json({ error: 'stableInactivityMinutes must be a non-negative integer' })
+      }
+      mappedUpdates.stableInactivityMinutes = val
     }
 
     // 获取账户当前信息以处理分组变更

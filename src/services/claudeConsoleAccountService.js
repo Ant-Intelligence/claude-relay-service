@@ -75,7 +75,9 @@ class ClaudeConsoleAccountService {
       schedulable = true, // 是否可被调度
       dailyQuota = 0, // 每日额度限制（美元），0表示不限制
       quotaResetTime = '00:00', // 额度重置时间（HH:mm格式）
-      maxConcurrentTasks = 0 // 最大并发任务数，0表示无限制
+      maxConcurrentTasks = 0, // 最大并发任务数，0表示无限制
+      maxStableSessions = 1, // 稳定账户最大会话数
+      stableInactivityMinutes = 5 // 稳定账户不活跃超时（分钟）
     } = options
 
     // 验证必填字段
@@ -123,7 +125,10 @@ class ClaudeConsoleAccountService {
       lastResetDate: redis.getDateStringInTimezone(), // 最后重置日期（按配置时区）
       quotaResetTime, // 额度重置时间
       quotaStoppedAt: '', // 因额度停用的时间
-      maxConcurrentTasks: maxConcurrentTasks.toString() // 最大并发任务数，0表示无限制
+      maxConcurrentTasks: maxConcurrentTasks.toString(), // 最大并发任务数，0表示无限制
+      // 稳定账户配置
+      maxStableSessions: maxStableSessions.toString(),
+      stableInactivityMinutes: stableInactivityMinutes.toString()
     }
 
     const client = redis.getClientSafe()
@@ -262,7 +267,14 @@ class ClaudeConsoleAccountService {
 
             // 并发控制相关
             maxConcurrentTasks: parseInt(accountData.maxConcurrentTasks) || 0,
-            activeTaskCount: 0 // 占位，后面批量获取
+            activeTaskCount: 0, // 占位，后面批量获取
+            // 稳定账户配置
+            maxStableSessions: parseInt(accountData.maxStableSessions) || 1,
+            stableInactivityMinutes:
+              accountData.stableInactivityMinutes !== undefined &&
+              accountData.stableInactivityMinutes !== ''
+                ? parseInt(accountData.stableInactivityMinutes)
+                : 5
           })
         }
       }
@@ -341,6 +353,13 @@ class ClaudeConsoleAccountService {
     accountData.maxConcurrentTasks = parseInt(accountData.maxConcurrentTasks) || 0
     // 获取实时并发计数
     accountData.activeTaskCount = await redis.getConsoleAccountConcurrency(accountId)
+    // 稳定账户配置
+    accountData.maxStableSessions = parseInt(accountData.maxStableSessions) || 1
+    accountData.stableInactivityMinutes =
+      accountData.stableInactivityMinutes !== undefined &&
+      accountData.stableInactivityMinutes !== ''
+        ? parseInt(accountData.stableInactivityMinutes)
+        : 5
 
     logger.debug(
       `[DEBUG] Final account data - name: ${accountData.name}, hasApiUrl: ${!!accountData.apiUrl}, hasApiKey: ${!!accountData.apiKey}, supportedModels: ${JSON.stringify(accountData.supportedModels)}`
@@ -439,6 +458,14 @@ class ClaudeConsoleAccountService {
       // 并发控制相关字段
       if (updates.maxConcurrentTasks !== undefined) {
         updatedData.maxConcurrentTasks = updates.maxConcurrentTasks.toString()
+      }
+
+      // 稳定账户配置字段
+      if (updates.maxStableSessions !== undefined) {
+        updatedData.maxStableSessions = updates.maxStableSessions.toString()
+      }
+      if (updates.stableInactivityMinutes !== undefined) {
+        updatedData.stableInactivityMinutes = updates.stableInactivityMinutes.toString()
       }
 
       // ✅ 直接保存 subscriptionExpiresAt（如果提供）

@@ -1693,7 +1693,7 @@ async function testAccount(accountId, model) {
       account = await getAccount(accountId)
     }
 
-    const accessToken = account.accessToken
+    const { accessToken } = account
     if (!accessToken) {
       return { success: false, error: 'No access token available' }
     }

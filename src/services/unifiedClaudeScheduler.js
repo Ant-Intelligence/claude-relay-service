@@ -302,8 +302,8 @@ class UnifiedClaudeScheduler {
               effectiveModel
             )
             if (isAvailable) {
-              // 🚀 智能会话续期：剩余时间少于14天时自动续期到15天（续期正确的 unified 映射键）
-              await this._extendSessionMappingTTL(sessionHash)
+              // 🚀 刷新会话活跃时间并重置 TTL
+              await this._updateSessionActivity(sessionHash, mappedAccount)
               logger.info(
                 `🎯 Using sticky session account: ${mappedAccount.accountId} (${mappedAccount.accountType}) for session ${sessionHash}`
               )
@@ -314,6 +314,7 @@ class UnifiedClaudeScheduler {
               )
               previousAccountType = mappedAccount.accountType
               await this._deleteSessionMapping(sessionHash)
+              await this._removeFromStableAccountSessions(mappedAccount.accountId, sessionHash)
             }
           }
         }
@@ -374,6 +375,9 @@ class UnifiedClaudeScheduler {
           selectedAccount.accountId,
           selectedAccount.accountType
         )
+        if (selectedAccount.isStableAccount) {
+          await this._addToStableAccountSessions(selectedAccount.accountId, sessionHash)
+        }
         logger.info(
           `🎯 Created new sticky session mapping: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) for session ${sessionHash}`
         )
@@ -592,7 +596,9 @@ class UnifiedClaudeScheduler {
         account.status !== 'error' &&
         account.status !== 'blocked' &&
         account.status !== 'temp_error' &&
-        (account.accountType === 'shared' || !account.accountType) && // 兼容旧数据
+        (account.accountType === 'shared' ||
+          !account.accountType ||
+          account.accountType === 'stable') && // 兼容旧数据
         this._isSchedulable(account.schedulable)
       ) {
         // 检查是否可调度
@@ -618,13 +624,42 @@ class UnifiedClaudeScheduler {
           }
         }
 
-        availableAccounts.push({
-          ...account,
-          accountId: account.id,
-          accountType: 'claude-official',
-          priority: parseInt(account.priority) || 50, // 默认优先级50
-          lastUsedAt: account.lastUsedAt || '0'
-        })
+        // 稳定账户：检查会话槽容量
+        if (account.accountType === 'stable') {
+          const maxStableSessions = parseInt(account.maxStableSessions) || 1
+          const stableInactivityMinutes =
+            account.stableInactivityMinutes !== undefined
+              ? parseInt(account.stableInactivityMinutes)
+              : 5
+          const activeSlots = await this._countActiveStableSessionSlots(
+            account.id,
+            stableInactivityMinutes
+          )
+          if (activeSlots >= maxStableSessions) {
+            logger.debug(
+              `⏸️ Stable account ${account.name} (${account.id}) at capacity: ${activeSlots}/${maxStableSessions} active sessions`
+            )
+            continue
+          }
+          availableAccounts.push({
+            ...account,
+            accountId: account.id,
+            accountType: 'claude-official',
+            isStableAccount: true,
+            maxStableSessions,
+            stableInactivityMinutes,
+            priority: parseInt(account.priority) || 50,
+            lastUsedAt: account.lastUsedAt || '0'
+          })
+        } else {
+          availableAccounts.push({
+            ...account,
+            accountId: account.id,
+            accountType: 'claude-official',
+            priority: parseInt(account.priority) || 50, // 默认优先级50
+            lastUsedAt: account.lastUsedAt || '0'
+          })
+        }
       }
     }
 
@@ -664,7 +699,7 @@ class UnifiedClaudeScheduler {
       if (
         currentAccount.isActive === true &&
         currentAccount.status === 'active' &&
-        currentAccount.accountType === 'shared' &&
+        (currentAccount.accountType === 'shared' || currentAccount.accountType === 'stable') &&
         this._isSchedulable(currentAccount.schedulable)
       ) {
         // 检查是否可调度
@@ -703,8 +738,39 @@ class UnifiedClaudeScheduler {
         // 🔢 记录符合基本条件的账户（通过了前面所有检查，但可能因并发被排除）
         if (!isRateLimited && !isQuotaExceeded) {
           consoleAccountsEligibleCount++
-          // 🚀 将符合条件且需要并发检查的账户加入批量查询列表
-          if (currentAccount.maxConcurrentTasks > 0) {
+
+          // 稳定账户：检查会话槽容量
+          if (currentAccount.accountType === 'stable') {
+            const maxStableSessions = parseInt(currentAccount.maxStableSessions) || 1
+            const stableInactivityMinutes =
+              currentAccount.stableInactivityMinutes !== undefined
+                ? parseInt(currentAccount.stableInactivityMinutes)
+                : 5
+            const activeSlots = await this._countActiveStableSessionSlots(
+              currentAccount.id,
+              stableInactivityMinutes
+            )
+            if (activeSlots >= maxStableSessions) {
+              logger.debug(
+                `⏸️ Stable Claude Console account ${currentAccount.name} (${currentAccount.id}) at capacity: ${activeSlots}/${maxStableSessions} active sessions`
+              )
+            } else {
+              availableAccounts.push({
+                ...currentAccount,
+                accountId: currentAccount.id,
+                accountType: 'claude-console',
+                isStableAccount: true,
+                maxStableSessions,
+                stableInactivityMinutes,
+                priority: parseInt(currentAccount.priority) || 50,
+                lastUsedAt: currentAccount.lastUsedAt || '0'
+              })
+              logger.debug(
+                `✅ Added stable Claude Console account: ${currentAccount.name} (slots: ${activeSlots}/${maxStableSessions})`
+              )
+            }
+            // 🚀 将符合条件且需要并发检查的账户加入批量查询列表
+          } else if (currentAccount.maxConcurrentTasks > 0) {
             accountsNeedingConcurrencyCheck.push(currentAccount)
           } else {
             // 未配置并发限制的账户直接加入可用池
@@ -1145,8 +1211,22 @@ class UnifiedClaudeScheduler {
   // 💾 设置会话映射
   async _setSessionMapping(sessionHash, accountId, accountType) {
     const client = redis.getClientSafe()
-    const mappingData = JSON.stringify({ accountId, accountType })
+    const mappingData = JSON.stringify({ accountId, accountType, lastActivity: Date.now() })
     // 依据配置设置TTL（小时）
+    const appConfig = require('../../config/config')
+    const ttlHours = appConfig.session?.stickyTtlHours || 1
+    const ttlSeconds = Math.max(1, Math.floor(ttlHours * 60 * 60))
+    await client.setex(`${this.SESSION_MAPPING_PREFIX}${sessionHash}`, ttlSeconds, mappingData)
+  }
+
+  // 🔄 更新会话活跃时间（刷新 lastActivity 并重置 TTL）
+  async _updateSessionActivity(sessionHash, mapping) {
+    const client = redis.getClientSafe()
+    const mappingData = JSON.stringify({
+      accountId: mapping.accountId,
+      accountType: mapping.accountType,
+      lastActivity: Date.now()
+    })
     const appConfig = require('../../config/config')
     const ttlHours = appConfig.session?.stickyTtlHours || 1
     const ttlSeconds = Math.max(1, Math.floor(ttlHours * 60 * 60))
@@ -1157,6 +1237,62 @@ class UnifiedClaudeScheduler {
   async _deleteSessionMapping(sessionHash) {
     const client = redis.getClientSafe()
     await client.del(`${this.SESSION_MAPPING_PREFIX}${sessionHash}`)
+  }
+
+  // ➕ 将 sessionHash 加入稳定账户的反向索引（stable_account_sessions:{accountId}）
+  async _addToStableAccountSessions(accountId, sessionHash) {
+    const client = redis.getClientSafe()
+    await client.sadd(`stable_account_sessions:${accountId}`, sessionHash)
+  }
+
+  // ➖ 从稳定账户反向索引中移除 sessionHash；若集合为空则删除键
+  async _removeFromStableAccountSessions(accountId, sessionHash) {
+    const client = redis.getClientSafe()
+    await client.srem(`stable_account_sessions:${accountId}`, sessionHash)
+    const remaining = await client.scard(`stable_account_sessions:${accountId}`)
+    if (remaining === 0) {
+      await client.del(`stable_account_sessions:${accountId}`)
+    }
+  }
+
+  // 🔢 统计稳定账户的活跃会话槽数量（lastActivity 在不活跃阈值内的会话数）
+  async _countActiveStableSessionSlots(accountId, stableInactivityMinutes) {
+    const client = redis.getClientSafe()
+    const sessionHashes = await client.smembers(`stable_account_sessions:${accountId}`)
+    if (sessionHashes.length === 0) {
+      return 0
+    }
+
+    const keys = sessionHashes.map((h) => `${this.SESSION_MAPPING_PREFIX}${h}`)
+    const mappingValues = await client.mget(...keys)
+
+    const now = Date.now()
+    const threshold = now - stableInactivityMinutes * 60000
+    let activeCount = 0
+    const expiredHashes = []
+
+    for (let i = 0; i < sessionHashes.length; i++) {
+      const mappingJSON = mappingValues[i]
+      if (!mappingJSON) {
+        expiredHashes.push(sessionHashes[i])
+        continue
+      }
+      try {
+        const mapping = JSON.parse(mappingJSON)
+        const lastActivity = mapping.lastActivity || 0
+        if (lastActivity > threshold) {
+          activeCount++
+        }
+      } catch {
+        expiredHashes.push(sessionHashes[i])
+      }
+    }
+
+    if (expiredHashes.length > 0) {
+      await client.srem(`stable_account_sessions:${accountId}`, ...expiredHashes)
+    }
+
+    return activeCount
   }
 
   /**
@@ -1468,8 +1604,8 @@ class UnifiedClaudeScheduler {
                 requestedModel
               )
               if (isAvailable) {
-                // 🚀 智能会话续期：续期 unified 映射键
-                await this._extendSessionMappingTTL(sessionHash)
+                // 🚀 刷新会话活跃时间并重置 TTL
+                await this._updateSessionActivity(sessionHash, mappedAccount)
                 logger.info(
                   `🎯 Using sticky session account from group: ${mappedAccount.accountId} (${mappedAccount.accountType}) for session ${sessionHash}`
                 )
@@ -1488,6 +1624,10 @@ class UnifiedClaudeScheduler {
           }
           // 如果映射的账户不可用或不在分组中，删除映射
           await this._deleteSessionMapping(sessionHash)
+          await this._removeFromStableAccountSessions(mappedAccount.accountId, sessionHash)
+          logger.debug(
+            `🧹 Stable session cleanup: removed ${sessionHash} from stable_account_sessions:${mappedAccount.accountId}`
+          )
         }
       }
 
@@ -1712,6 +1852,9 @@ class UnifiedClaudeScheduler {
           selectedAccount.accountId,
           selectedAccount.accountType
         )
+        if (selectedAccount.isStableAccount) {
+          await this._addToStableAccountSessions(selectedAccount.accountId, sessionHash)
+        }
         logger.info(
           `🎯 Created new sticky session mapping in group: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) for session ${sessionHash}`
         )
@@ -1745,8 +1888,8 @@ class UnifiedClaudeScheduler {
             effectiveModel
           )
           if (isAvailable) {
-            // 🚀 智能会话续期：续期 unified 映射键
-            await this._extendSessionMappingTTL(sessionHash)
+            // 🚀 刷新会话活跃时间并重置 TTL
+            await this._updateSessionActivity(sessionHash, mappedAccount)
             logger.info(
               `🎯 Using sticky CCR session account: ${mappedAccount.accountId} for session ${sessionHash}`
             )
@@ -1756,6 +1899,7 @@ class UnifiedClaudeScheduler {
               `⚠️ Mapped CCR account ${mappedAccount.accountId} is no longer available, selecting new account`
             )
             await this._deleteSessionMapping(sessionHash)
+            await this._removeFromStableAccountSessions(mappedAccount.accountId, sessionHash)
           }
         }
       }

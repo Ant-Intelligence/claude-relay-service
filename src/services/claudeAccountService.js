@@ -98,7 +98,9 @@ class ClaudeAccountService {
       useUnifiedClientId = false, // 是否使用统一的客户端标识
       unifiedClientId = '', // 统一的客户端标识
       expiresAt = null, // 账户订阅到期时间
-      extInfo = null // 额外扩展信息
+      extInfo = null, // 额外扩展信息
+      maxStableSessions = 1, // 稳定账户最大会话数
+      stableInactivityMinutes = 5 // 稳定账户不活跃超时（分钟）
     } = options
 
     const accountId = uuidv4()
@@ -143,7 +145,10 @@ class ClaudeAccountService {
         // 账户订阅到期时间
         subscriptionExpiresAt: expiresAt || '',
         // 扩展信息
-        extInfo: normalizedExtInfo ? JSON.stringify(normalizedExtInfo) : ''
+        extInfo: normalizedExtInfo ? JSON.stringify(normalizedExtInfo) : '',
+        // 稳定账户配置
+        maxStableSessions: maxStableSessions.toString(),
+        stableInactivityMinutes: stableInactivityMinutes.toString()
       }
     } else {
       // 兼容旧格式
@@ -159,7 +164,7 @@ class ClaudeAccountService {
         scopes: '',
         proxy: proxy ? JSON.stringify(proxy) : '',
         isActive: isActive.toString(),
-        accountType, // 账号类型：'dedicated' 或 'shared' 或 'group'
+        accountType, // 账号类型：'dedicated' 或 'shared' 或 'group' 或 'stable'
         platform,
         priority: priority.toString(), // 调度优先级
         createdAt: new Date().toISOString(),
@@ -175,7 +180,10 @@ class ClaudeAccountService {
         // 账户订阅到期时间
         subscriptionExpiresAt: expiresAt || '',
         // 扩展信息
-        extInfo: normalizedExtInfo ? JSON.stringify(normalizedExtInfo) : ''
+        extInfo: normalizedExtInfo ? JSON.stringify(normalizedExtInfo) : '',
+        // 稳定账户配置
+        maxStableSessions: maxStableSessions.toString(),
+        stableInactivityMinutes: stableInactivityMinutes.toString()
       }
     }
 
@@ -590,7 +598,14 @@ class ClaudeAccountService {
             // 添加停止原因
             stoppedReason: account.stoppedReason || null,
             // 扩展信息
-            extInfo: parsedExtInfo
+            extInfo: parsedExtInfo,
+            // 稳定账户配置
+            maxStableSessions: parseInt(account.maxStableSessions) || 1,
+            stableInactivityMinutes:
+              account.stableInactivityMinutes !== undefined &&
+              account.stableInactivityMinutes !== ''
+                ? parseInt(account.stableInactivityMinutes)
+                : 5
           }
         })
       )
@@ -682,7 +697,9 @@ class ClaudeAccountService {
         'useUnifiedClientId',
         'unifiedClientId',
         'subscriptionExpiresAt',
-        'extInfo'
+        'extInfo',
+        'maxStableSessions',
+        'stableInactivityMinutes'
       ]
       const updatedData = { ...accountData }
       let shouldClearAutoStopFields = false
