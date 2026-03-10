@@ -96,6 +96,26 @@
                 </option>
               </select>
             </div>
+            <!-- Codex 测试模式开关（仅 OpenAI Responses） -->
+            <div
+              v-if="props.account?.platform === 'openai-responses'"
+              class="flex items-center justify-between text-sm"
+            >
+              <span class="text-gray-500 dark:text-gray-400">测试方式</span>
+              <button
+                :class="[
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition',
+                  useCodexTest
+                    ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-500/40'
+                    : 'bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:ring-gray-600'
+                ]"
+                :disabled="testStatus === 'testing'"
+                @click="useCodexTest = !useCodexTest"
+              >
+                <i :class="useCodexTest ? 'fas fa-terminal' : 'fas fa-globe'" />
+                {{ useCodexTest ? 'Codex CLI' : '直接请求' }}
+              </button>
+            </div>
           </div>
 
           <!-- 状态指示 -->
@@ -223,6 +243,7 @@ const errorMessage = ref('')
 const testDuration = ref(0)
 const testStartTime = ref(null)
 const eventSource = ref(null)
+const useCodexTest = ref(false)
 
 // 测试模型
 const testModel = ref('claude-haiku-4-5-20251001')
@@ -509,7 +530,10 @@ async function startTest() {
         'Content-Type': 'application/json',
         Authorization: authToken ? `Bearer ${authToken}` : ''
       },
-      body: JSON.stringify({ model: testModel.value })
+      body: JSON.stringify({
+        model: testModel.value,
+        ...(useCodexTest.value && { useCodex: true })
+      })
     })
 
     if (!response.ok) {
@@ -605,6 +629,7 @@ watch(
       responseText.value = ''
       errorMessage.value = ''
       testDuration.value = 0
+      useCodexTest.value = false
 
       // 根据平台设置默认测试模型（默认使用最小/最便宜的模型）
       if (props.account?.platform === 'bedrock') {

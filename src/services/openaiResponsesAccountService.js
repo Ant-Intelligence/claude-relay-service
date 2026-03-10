@@ -630,6 +630,98 @@ class OpenAIResponsesAccountService {
     }
   }
 
+  // 通过 Codex CLI 子进程测试账户连通性（适用于有 TLS 指纹检测的中转服务）
+  async testAccountViaCodex(accountId, model) {
+    const { execFile } = require('child_process')
+    const { promisify } = require('util')
+    const execFileAsync = promisify(execFile)
+    const startTime = Date.now()
+
+    try {
+      const account = await this.getAccount(accountId)
+      if (!account) {
+        return { success: false, error: 'Account not found' }
+      }
+      if (!account.apiKey) {
+        return { success: false, error: 'No API key available' }
+      }
+      if (!account.baseApi) {
+        return { success: false, error: 'No base API URL configured' }
+      }
+
+      const modelName = model || 'gpt-5.1-codex-mini'
+      const providerName = `test_${accountId.substring(0, 8)}`
+
+      const args = [
+        'exec',
+        '-c',
+        `model_provider="${providerName}"`,
+        '-c',
+        `model="${modelName}"`,
+        '-c',
+        `model_providers.${providerName}.name="${providerName}"`,
+        '-c',
+        `model_providers.${providerName}.base_url="${account.baseApi}"`,
+        '-c',
+        `model_providers.${providerName}.wire_api="responses"`,
+        '-c',
+        `model_providers.${providerName}.requires_openai_auth=true`,
+        '-c',
+        `model_providers.${providerName}.env_key="OPENAI_API_KEY"`,
+        'say hello in one word'
+      ]
+
+      const env = {
+        ...process.env,
+        OPENAI_API_KEY: account.apiKey
+      }
+
+      logger.info(
+        `🧪 Testing OpenAI-Responses account ${accountId} via Codex CLI, model: ${modelName}`
+      )
+
+      const { stdout } = await execFileAsync('codex', args, {
+        env,
+        timeout: 60000,
+        maxBuffer: 1024 * 1024
+      })
+
+      const duration = Date.now() - startTime
+      const output = stdout.trim()
+
+      // codex exec 成功时输出最后一行是模型响应
+      const lines = output.split('\n')
+      const responseText = lines[lines.length - 1] || ''
+
+      // 从输出中提取 tokens used 信息
+      const tokensMatch = output.match(/tokens used\s*\n\s*([\d,]+)/)
+      const totalTokens = tokensMatch ? parseInt(tokensMatch[1].replace(/,/g, ''), 10) : 0
+
+      logger.info(
+        `✅ OpenAI-Responses account test via Codex CLI successful for ${accountId}, duration: ${duration}ms`
+      )
+
+      return {
+        success: true,
+        responseText,
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: totalTokens
+        },
+        duration,
+        testMethod: 'codex'
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime
+      const errorMessage = error.stderr?.trim() || error.message || 'Codex CLI test failed'
+      logger.error(`❌ OpenAI-Responses account test via Codex CLI failed for ${accountId}:`, {
+        error: errorMessage
+      })
+      return { success: false, error: errorMessage, duration, testMethod: 'codex' }
+    }
+  }
+
   // ⏰ 检查账户订阅是否已过期
   isSubscriptionExpired(account) {
     if (!account.subscriptionExpiresAt) {

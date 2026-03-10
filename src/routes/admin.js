@@ -10074,7 +10074,7 @@ router.post('/openai-responses-accounts/:id/reset-usage', authenticateAdmin, asy
 // 测试 OpenAI-Responses 账户连通性
 router.post('/openai-responses-accounts/:accountId/test', authenticateAdmin, async (req, res) => {
   const { accountId } = req.params
-  const { model } = req.body
+  const { model, useCodex } = req.body
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -10084,16 +10084,21 @@ router.post('/openai-responses-accounts/:accountId/test', authenticateAdmin, asy
 
   try {
     res.write(`data: ${JSON.stringify({ type: 'test_start' })}\n\n`)
-    const result = await openaiResponsesAccountService.testAccount(accountId, model)
+
+    const result = useCodex
+      ? await openaiResponsesAccountService.testAccountViaCodex(accountId, model)
+      : await openaiResponsesAccountService.testAccount(accountId, model)
 
     if (result.success) {
       res.write(`data: ${JSON.stringify({ type: 'content', text: result.responseText })}\n\n`)
       res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`)
       res.write(
-        `data: ${JSON.stringify({ type: 'test_complete', success: true, usage: result.usage, duration: result.duration })}\n\n`
+        `data: ${JSON.stringify({ type: 'test_complete', success: true, usage: result.usage, duration: result.duration, testMethod: result.testMethod || 'direct' })}\n\n`
       )
     } else {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: result.error })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({ type: 'error', error: result.error, testMethod: result.testMethod || 'direct' })}\n\n`
+      )
     }
   } catch (error) {
     logger.error(`❌ Failed to test OpenAI-Responses account:`, error)
