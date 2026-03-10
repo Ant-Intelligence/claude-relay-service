@@ -22,7 +22,7 @@ A stable account limits how many simultaneous API-key sessions occupy it at a gi
 
 ---
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Schedule Into a Stable Account (Priority: P1)
 
@@ -92,20 +92,20 @@ When a stable account becomes unavailable (overloaded, rate-limited, error state
 
 - What happens when all stable accounts are at capacity and no other shared accounts are available? The scheduler returns the same "no available accounts" result it would for any other account type — not a stable-specific error.
 - What happens if a stable account's inactivity threshold is set to 0 minutes? Treat 0 as "no inactivity eviction" — effectively a concurrency-limited shared account where all session slots stay permanently occupied once filled.
-- What happens when a timed-out session and a new session both become active simultaneously? Both coexist on the stable account. The slot count temporarily exceeds `maxStableSessions` until one of the sessions becomes inactive again. This is intentional and expected.
+- What happens when a timed-out session and a new session both become active simultaneously? Both coexist on the stable account. The actual concurrent session count temporarily exceeds `maxStableSessions` until one of the sessions becomes inactive again. This is intentional and expected — `maxStableSessions` is a desired session count (soft limit) that only gates new session admission. When all coexisting sessions remain active, their `lastActivity` timestamps are refreshed, they all count as active slots, and no further new sessions are admitted until one becomes inactive again. No existing session is ever forcibly evicted.
 - What if `maxStableSessions` is set higher than the account's natural concurrency limit? The natural per-request concurrency limit (`maxConcurrentTasks`) still applies independently; `maxStableSessions` controls session-level slot management only.
 - What if a request arrives without a session hash? Requests without session hashes cannot create stable session slots. The stable account may still be selected for the request, but no slot is claimed and no session mapping is persisted.
 
 ---
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
 - **FR-001**: The system MUST support a new account type value `stable` for Claude accounts, alongside existing types.
 - **FR-002**: Stable accounts MUST participate in the shared pool scheduling process, following existing priority and last-used-time ordering.
 - **FR-003**: Stable accounts MUST track active sessions by counting session mappings whose last activity is within the configured inactivity threshold.
-- **FR-004**: The scheduler MUST treat a stable account as "at capacity" (skip it without error) when the count of recently-active session slots equals or exceeds `maxStableSessions`.
+- **FR-004**: The scheduler MUST refuse new session admission (skip the account without error) when the count of recently-active session slots equals or exceeds `maxStableSessions`. This is a soft limit controlling new session entry only — existing sessions that reactivate after inactivity are not rejected.
 - **FR-005**: The scheduler MUST consider a session slot "available" when the session's last activity timestamp exceeds the inactivity threshold, even if a session mapping still exists for that session.
 - **FR-006**: When a follow-up request arrives for an existing session mapped to a stable account, the scheduler MUST continue routing to that account regardless of whether the slot would be counted as "available" (session continuity takes priority over capacity enforcement).
 - **FR-007**: When a request discovers its mapped stable account is unavailable, the system MUST delete only that requesting session's own mapping and reschedule the current request; session mappings belonging to other API keys on the same stable account MUST NOT be touched.
@@ -118,11 +118,11 @@ When a stable account becomes unavailable (overloaded, rate-limited, error state
 
 - **Stable Account**: A Claude account (official, console, or bedrock) with `accountType = stable`, extended with `maxStableSessions` (integer ≥ 1, default 1) and `stableInactivityMinutes` (integer ≥ 0, default 5) configuration fields.
 - **Stable Session Slot**: A session mapping entry on a stable account, containing the session hash, mapped account ID, and last-activity timestamp. A slot is "active" if its last-activity is within `stableInactivityMinutes`; "available" (evictable) if it has timed out. The mapping expires automatically after the standard sticky session TTL (default 1h) if no further requests arrive; each successful request resets this TTL.
-- **Session Slot Capacity**: The count of active (non-timed-out) session slots on a stable account. When this equals `maxStableSessions`, no new sessions can enter the account until a slot times out.
+- **Session Slot Capacity**: The count of active (non-timed-out) session slots on a stable account, used solely as a new-session admission gate. When this count equals `maxStableSessions`, no **new** sessions can enter the account until a slot times out. Note: the actual concurrent session count may temporarily exceed `maxStableSessions` when previously inactive sessions reactivate — this is expected and by design.
 
 ---
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 

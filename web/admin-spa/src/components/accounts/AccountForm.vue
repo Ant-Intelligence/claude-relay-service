@@ -678,14 +678,14 @@
               </div>
               <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 共享账户：供所有API Key使用；专属账户：仅供特定API
-                Key使用；分组调度：加入分组供分组内调度；稳定账户：限制并发会话数的共享账户
+                Key使用；分组调度：加入分组供分组内调度；稳定账户：控制期望会话数的共享账户，排斥新会话但包容已有会话
               </p>
             </div>
 
             <!-- 稳定账户配置 -->
             <div v-if="form.accountType === 'stable'">
               <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
-                >最大会话数</label
+                >期望会话数</label
               >
               <input
                 v-model.number="form.maxStableSessions"
@@ -694,7 +694,8 @@
                 type="number"
               />
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                同时允许的最大并发会话数，默认为 1
+                期望同时活跃的会话数（软限制），超过此值时拒绝新会话进入，但不活跃会话恢复后仍可继续使用，默认为
+                1
               </p>
             </div>
             <div v-if="form.accountType === 'stable'">
@@ -2453,14 +2454,14 @@
             </div>
             <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
               共享账户：供所有API Key使用；专属账户：仅供特定API
-              Key使用；分组调度：加入分组供分组内调度；稳定账户：限制并发会话数的共享账户
+              Key使用；分组调度：加入分组供分组内调度；稳定账户：控制期望会话数的共享账户，排斥新会话但包容已有会话
             </p>
           </div>
 
           <!-- 稳定账户配置 -->
           <div v-if="form.accountType === 'stable'">
             <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300"
-              >最大会话数</label
+              >期望会话数</label
             >
             <input
               v-model.number="form.maxStableSessions"
@@ -2469,7 +2470,8 @@
               type="number"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              同时允许的最大并发会话数，默认为 1
+              期望同时活跃的会话数（软限制），超过此值时拒绝新会话进入，但不活跃会话恢复后仍可继续使用，默认为
+              1
             </p>
           </div>
           <div v-if="form.accountType === 'stable'">

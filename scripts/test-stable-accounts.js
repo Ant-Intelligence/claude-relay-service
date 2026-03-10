@@ -28,11 +28,11 @@ const CC_CLUB_ID = '59b7d8a0-eab2-46cd-8695-45951fd75e62'
 const PIN_CC_ID = '3593c920-c174-40fd-9ae5-2d633832297d'
 
 const STABLE_KEY = `claude_console_account:${CC_CLUB_ID}`
-const SHARED_KEY = `claude_console_account:${PIN_CC_ID}`
+const _SHARED_KEY = `claude_console_account:${PIN_CC_ID}`
 const SESSION_PREFIX = 'unified_claude_session_mapping:'
 const STABLE_SESSIONS_KEY = `stable_account_sessions:${CC_CLUB_ID}`
 
-let testSessionHashes = []
+const testSessionHashes = []
 let originalAccountType = null
 
 async function setup() {
@@ -52,7 +52,9 @@ async function setup() {
   const newType = await client.hget(STABLE_KEY, 'accountType')
   const maxSessions = await client.hget(STABLE_KEY, 'maxStableSessions')
   const inactivity = await client.hget(STABLE_KEY, 'stableInactivityMinutes')
-  pass(`cc-club 已设置为 stable (accountType=${newType}, maxStableSessions=${maxSessions}, stableInactivityMinutes=${inactivity})`)
+  pass(
+    `cc-club 已设置为 stable (accountType=${newType}, maxStableSessions=${maxSessions}, stableInactivityMinutes=${inactivity})`
+  )
 
   // 清理可能残留的测试会话数据
   await client.del(STABLE_SESSIONS_KEY)
@@ -83,7 +85,7 @@ async function runTests() {
   section('Test 2: _addToStableAccountSessions + _countActiveStableSessionSlots — 新会话占用 1 槽')
   // ─────────────────────────────────────────────────────────────────
   {
-    const sessionHash = 'test_stable_h1_' + Date.now()
+    const sessionHash = `test_stable_h1_${Date.now()}`
     testSessionHashes.push(sessionHash)
 
     // 创建活跃的会话映射（lastActivity = 现在）
@@ -112,7 +114,7 @@ async function runTests() {
   section('Test 3: _countActiveStableSessionSlots — 超过不活跃阈值时槽变为可用（但会话仍在索引中）')
   // ─────────────────────────────────────────────────────────────────
   {
-    const sessionHash = 'test_stable_h2_old_' + Date.now()
+    const sessionHash = `test_stable_h2_old_${Date.now()}`
     testSessionHashes.push(sessionHash)
 
     // 人为设置 lastActivity = 2 分钟前（超过 1 分钟阈值）
@@ -121,7 +123,11 @@ async function runTests() {
     await client.setex(
       `${SESSION_PREFIX}${sessionHash}`,
       ttlSeconds,
-      JSON.stringify({ accountId: CC_CLUB_ID, accountType: 'claude-console', lastActivity: oldTime })
+      JSON.stringify({
+        accountId: CC_CLUB_ID,
+        accountType: 'claude-console',
+        lastActivity: oldTime
+      })
     )
     await client.sadd(STABLE_SESSIONS_KEY, sessionHash)
 
@@ -146,11 +152,14 @@ async function runTests() {
     }
 
     // 验证懒惰清理：当 Redis key 不存在时才清理——模拟 TTL 过期场景
-    const phantomHash = 'test_stable_phantom_' + Date.now()
+    const phantomHash = `test_stable_phantom_${Date.now()}`
     testSessionHashes.push(phantomHash)
     // 只添加到 Set，不创建对应的 Redis mapping key（模拟 TTL 已过期）
     await client.sadd(STABLE_SESSIONS_KEY, phantomHash)
-    const countWithPhantom = await unifiedClaudeScheduler._countActiveStableSessionSlots(CC_CLUB_ID, 1)
+    const countWithPhantom = await unifiedClaudeScheduler._countActiveStableSessionSlots(
+      CC_CLUB_ID,
+      1
+    )
     const membersAfter = await client.smembers(STABLE_SESSIONS_KEY)
     if (!membersAfter.includes(phantomHash)) {
       pass(`Redis key 不存在的幽灵会话被懒惰清理从反向索引移除 (count=${countWithPhantom})`)
@@ -165,7 +174,7 @@ async function runTests() {
   // ─────────────────────────────────────────────────────────────────
   {
     // 添加第二个活跃会话
-    const sessionH3 = 'test_stable_h3_' + Date.now()
+    const sessionH3 = `test_stable_h3_${Date.now()}`
     testSessionHashes.push(sessionH3)
     await unifiedClaudeScheduler._setSessionMapping(sessionH3, CC_CLUB_ID, 'claude-console')
     await unifiedClaudeScheduler._addToStableAccountSessions(CC_CLUB_ID, sessionH3)
@@ -205,7 +214,7 @@ async function runTests() {
   section('Test 5: _updateSessionActivity — 刷新 lastActivity 时间戳')
   // ─────────────────────────────────────────────────────────────────
   {
-    const sessionHash = 'test_stable_h5_' + Date.now()
+    const sessionHash = `test_stable_h5_${Date.now()}`
     testSessionHashes.push(sessionHash)
 
     // 创建一个"旧"会话（lastActivity = 2 分钟前）
@@ -214,7 +223,11 @@ async function runTests() {
     await client.setex(
       `${SESSION_PREFIX}${sessionHash}`,
       ttlSeconds,
-      JSON.stringify({ accountId: CC_CLUB_ID, accountType: 'claude-console', lastActivity: oldTime })
+      JSON.stringify({
+        accountId: CC_CLUB_ID,
+        accountType: 'claude-console',
+        lastActivity: oldTime
+      })
     )
     await client.sadd(STABLE_SESSIONS_KEY, sessionHash)
 
@@ -228,7 +241,9 @@ async function runTests() {
       await unifiedClaudeScheduler._updateSessionActivity(sessionHash, mapping)
       const countAfter = await unifiedClaudeScheduler._countActiveStableSessionSlots(CC_CLUB_ID, 1)
       if (countAfter > countBefore) {
-        pass(`_updateSessionActivity 刷新后活跃槽数量从 ${countBefore} 升至 ${countAfter}（会话重新激活）`)
+        pass(
+          `_updateSessionActivity 刷新后活跃槽数量从 ${countBefore} 升至 ${countAfter}（会话重新激活）`
+        )
       } else {
         fail(`期望活跃数增加，实际 before=${countBefore} after=${countAfter}`)
         allPassed = false
@@ -270,7 +285,7 @@ async function runTests() {
   // ─────────────────────────────────────────────────────────────────
   {
     // 填满唯一的 1 个槽
-    const sessionFull = 'test_stable_full_' + Date.now()
+    const sessionFull = `test_stable_full_${Date.now()}`
     testSessionHashes.push(sessionFull)
     await unifiedClaudeScheduler._setSessionMapping(sessionFull, CC_CLUB_ID, 'claude-console')
     await unifiedClaudeScheduler._addToStableAccountSessions(CC_CLUB_ID, sessionFull)
@@ -352,7 +367,9 @@ async function main() {
   } finally {
     try {
       await redis.disconnect()
-    } catch {}
+    } catch (_e) {
+      /* ignore */
+    }
     process.exit(0)
   }
 }

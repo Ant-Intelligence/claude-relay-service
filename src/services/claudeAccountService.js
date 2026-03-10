@@ -99,7 +99,7 @@ class ClaudeAccountService {
       unifiedClientId = '', // 统一的客户端标识
       expiresAt = null, // 账户订阅到期时间
       extInfo = null, // 额外扩展信息
-      maxStableSessions = 1, // 稳定账户最大会话数
+      maxStableSessions = 1, // 稳定账户期望会话数（软限制，仅控制新会话准入）
       stableInactivityMinutes = 5 // 稳定账户不活跃超时（分钟）
     } = options
 
