@@ -76,7 +76,7 @@ class ClaudeConsoleAccountService {
       dailyQuota = 0, // 每日额度限制（美元），0表示不限制
       quotaResetTime = '00:00', // 额度重置时间（HH:mm格式）
       maxConcurrentTasks = 0, // 最大并发任务数，0表示无限制
-      maxStableSessions = 1, // 稳定账户最大会话数
+      maxStableSessions = 1, // 稳定账户期望会话数（软限制，仅控制新会话准入）
       stableInactivityMinutes = 5 // 稳定账户不活跃超时（分钟）
     } = options
 

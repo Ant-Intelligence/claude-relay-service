@@ -352,11 +352,8 @@ class RedisClient {
       2,
       '0'
     )}`
-    const currentHour = `${today}:${String(getHourInTimezone(now)).padStart(2, '0')}` // 新增小时级别
-
     const daily = `usage:daily:${keyId}:${today}`
     const monthly = `usage:monthly:${keyId}:${currentMonth}`
-    const hourly = `usage:hourly:${keyId}:${currentHour}` // 新增小时级别key
 
     // 标准化模型名用于统计聚合
     const normalizedModel = this._normalizeModelName(model)
@@ -364,12 +361,10 @@ class RedisClient {
     // 按模型统计的键
     const modelDaily = `usage:model:daily:${normalizedModel}:${today}`
     const modelMonthly = `usage:model:monthly:${normalizedModel}:${currentMonth}`
-    const modelHourly = `usage:model:hourly:${normalizedModel}:${currentHour}` // 新增模型小时级别
 
     // API Key级别的模型统计
     const keyModelDaily = `usage:${keyId}:model:daily:${normalizedModel}:${today}`
     const keyModelMonthly = `usage:${keyId}:model:monthly:${normalizedModel}:${currentMonth}`
-    const keyModelHourly = `usage:${keyId}:model:hourly:${normalizedModel}:${currentHour}` // 新增API Key模型小时级别
 
     // 模型索引键（用于快速查找该 API Key 使用过哪些模型，避免 SCAN）
     const keyModelsIndex = `usage:${keyId}:models`
@@ -489,31 +484,6 @@ class RedisClient {
     pipeline.hincrby(keyModelMonthly, 'ephemeral5mTokens', ephemeral5mTokens)
     pipeline.hincrby(keyModelMonthly, 'ephemeral1hTokens', ephemeral1hTokens)
 
-    // 小时级别统计
-    pipeline.hincrby(hourly, 'tokens', coreTokens)
-    pipeline.hincrby(hourly, 'inputTokens', finalInputTokens)
-    pipeline.hincrby(hourly, 'outputTokens', finalOutputTokens)
-    pipeline.hincrby(hourly, 'cacheCreateTokens', finalCacheCreateTokens)
-    pipeline.hincrby(hourly, 'cacheReadTokens', finalCacheReadTokens)
-    pipeline.hincrby(hourly, 'allTokens', totalTokens)
-    pipeline.hincrby(hourly, 'requests', 1)
-
-    // 按模型统计 - 每小时
-    pipeline.hincrby(modelHourly, 'inputTokens', finalInputTokens)
-    pipeline.hincrby(modelHourly, 'outputTokens', finalOutputTokens)
-    pipeline.hincrby(modelHourly, 'cacheCreateTokens', finalCacheCreateTokens)
-    pipeline.hincrby(modelHourly, 'cacheReadTokens', finalCacheReadTokens)
-    pipeline.hincrby(modelHourly, 'allTokens', totalTokens)
-    pipeline.hincrby(modelHourly, 'requests', 1)
-
-    // API Key级别的模型统计 - 每小时
-    pipeline.hincrby(keyModelHourly, 'inputTokens', finalInputTokens)
-    pipeline.hincrby(keyModelHourly, 'outputTokens', finalOutputTokens)
-    pipeline.hincrby(keyModelHourly, 'cacheCreateTokens', finalCacheCreateTokens)
-    pipeline.hincrby(keyModelHourly, 'cacheReadTokens', finalCacheReadTokens)
-    pipeline.hincrby(keyModelHourly, 'allTokens', totalTokens)
-    pipeline.hincrby(keyModelHourly, 'requests', 1)
-
     // 维护模型索引（用于快速查找，避免 SCAN）
     pipeline.sadd(keyModelsIndex, normalizedModel)
     pipeline.sadd(keyModelsMonthlyIndex, normalizedModel)
@@ -529,13 +499,10 @@ class RedisClient {
     // 设置过期时间
     pipeline.expire(daily, 86400 * 32) // 32天过期
     pipeline.expire(monthly, 86400 * 365) // 1年过期
-    pipeline.expire(hourly, 86400 * 7) // 小时统计7天过期
     pipeline.expire(modelDaily, 86400 * 32) // 模型每日统计32天过期
     pipeline.expire(modelMonthly, 86400 * 365) // 模型每月统计1年过期
-    pipeline.expire(modelHourly, 86400 * 7) // 模型小时统计7天过期
     pipeline.expire(keyModelDaily, 86400 * 32) // API Key模型每日统计32天过期
     pipeline.expire(keyModelMonthly, 86400 * 365) // API Key模型每月统计1年过期
-    pipeline.expire(keyModelHourly, 86400 * 7) // API Key模型小时统计7天过期
     // 模型索引过期时间
     pipeline.expire(keyModelsIndex, 86400 * 365) // 总模型索引1年过期
     pipeline.expire(keyModelsMonthlyIndex, 86400 * 365) // 月度模型索引1年过期
@@ -859,7 +826,6 @@ class RedisClient {
     // 账户按模型统计的键
     const accountModelDaily = `account_usage:model:daily:${accountId}:${normalizedModel}:${today}`
     const accountModelMonthly = `account_usage:model:monthly:${accountId}:${normalizedModel}:${currentMonth}`
-    const accountModelHourly = `account_usage:model:hourly:${accountId}:${normalizedModel}:${currentHour}`
 
     // 处理token分配
     const finalInputTokens = inputTokens || 0
@@ -976,37 +942,12 @@ class RedisClient {
           ]
         : []),
 
-      // 账户按模型统计 - 每小时
-      this.client.hincrby(accountModelHourly, 'inputTokens', finalInputTokens),
-      this.client.hincrby(accountModelHourly, 'outputTokens', finalOutputTokens),
-      this.client.hincrby(accountModelHourly, 'cacheCreateTokens', finalCacheCreateTokens),
-      this.client.hincrby(accountModelHourly, 'cacheReadTokens', finalCacheReadTokens),
-      this.client.hincrby(accountModelHourly, 'allTokens', actualTotalTokens),
-      this.client.hincrby(accountModelHourly, 'requests', 1),
-      // 媒体使用字段 - 每小时 (只在有值时写入，避免写入0)
-      ...(inputImages > 0
-        ? [this.client.hincrbyfloat(accountModelHourly, 'inputImages', inputImages)]
-        : []),
-      ...(outputImages > 0
-        ? [this.client.hincrbyfloat(accountModelHourly, 'outputImages', outputImages)]
-        : []),
-      ...(outputDurationSeconds > 0
-        ? [
-            this.client.hincrbyfloat(
-              accountModelHourly,
-              'outputDurationSeconds',
-              outputDurationSeconds
-            )
-          ]
-        : []),
-
       // 设置过期时间
       this.client.expire(accountDaily, 86400 * 32), // 32天过期
       this.client.expire(accountMonthly, 86400 * 365), // 1年过期
       this.client.expire(accountHourly, 86400 * 7), // 7天过期
       this.client.expire(accountModelDaily, 86400 * 32), // 32天过期
-      this.client.expire(accountModelMonthly, 86400 * 365), // 1年过期
-      this.client.expire(accountModelHourly, 86400 * 7) // 7天过期
+      this.client.expire(accountModelMonthly, 86400 * 365) // 1年过期
     ]
 
     // 如果是 1M 上下文请求，添加额外的统计
@@ -1271,11 +1212,8 @@ class RedisClient {
       2,
       '0'
     )}`
-    const currentHour = `${today}:${String(getHourInTimezone(new Date())).padStart(2, '0')}`
-
     const dailyKey = `usage:cost:daily:${keyId}:${today}`
     const monthlyKey = `usage:cost:monthly:${keyId}:${currentMonth}`
-    const hourlyKey = `usage:cost:hourly:${keyId}:${currentHour}`
     const totalKey = `usage:cost:total:${keyId}` // 总费用键 - 永不过期，持续累加
 
     logger.debug(
@@ -1285,12 +1223,10 @@ class RedisClient {
     const results = await Promise.all([
       this.client.incrbyfloat(dailyKey, amount),
       this.client.incrbyfloat(monthlyKey, amount),
-      this.client.incrbyfloat(hourlyKey, amount),
       this.client.incrbyfloat(totalKey, amount), // ✅ 累加到总费用（永不过期）
       // 设置过期时间（注意：totalKey 不设置过期时间，保持永久累计）
       this.client.expire(dailyKey, 86400 * 30), // 30天
-      this.client.expire(monthlyKey, 86400 * 90), // 90天
-      this.client.expire(hourlyKey, 86400 * 7) // 7天
+      this.client.expire(monthlyKey, 86400 * 90) // 90天
     ])
 
     logger.debug(`💰 Cost incremented successfully, new daily total: $${results[0]}`)
@@ -1304,19 +1240,16 @@ class RedisClient {
       2,
       '0'
     )}`
-    const currentHour = `${today}:${String(getHourInTimezone(new Date())).padStart(2, '0')}`
-
-    const [daily, monthly, hourly, total] = await Promise.all([
+    const [daily, monthly, total] = await Promise.all([
       this.client.get(`usage:cost:daily:${keyId}:${today}`),
       this.client.get(`usage:cost:monthly:${keyId}:${currentMonth}`),
-      this.client.get(`usage:cost:hourly:${keyId}:${currentHour}`),
       this.client.get(`usage:cost:total:${keyId}`)
     ])
 
     return {
       daily: parseFloat(daily || 0),
       monthly: parseFloat(monthly || 0),
-      hourly: parseFloat(hourly || 0),
+      hourly: 0, // hourly 统计已关闭，保留字段兼容前端
       total: parseFloat(total || 0)
     }
   }

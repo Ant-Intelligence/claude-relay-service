@@ -547,7 +547,7 @@ class OpenAIResponsesAccountService {
       }
 
       const modelName = model || 'gpt-5.1-codex-mini'
-      const apiUrl = `${account.baseApi}/v1/chat/completions`
+      const apiUrl = `${account.baseApi}/v1/responses`
 
       const headers = {
         Authorization: `Bearer ${account.apiKey}`,
@@ -560,8 +560,8 @@ class OpenAIResponsesAccountService {
 
       const requestBody = {
         model: modelName,
-        messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 100
+        input: 'hi',
+        max_output_tokens: 100
       }
 
       const axiosConfig = {
@@ -586,8 +586,25 @@ class OpenAIResponsesAccountService {
       const response = await axios(axiosConfig)
       const duration = Date.now() - startTime
 
-      const responseText = response.data?.choices?.[0]?.message?.content || ''
-      const usage = response.data?.usage || {}
+      // /v1/responses 格式: output[].content[].text 或直接 output_text
+      const data = response.data || {}
+      let responseText = data.output_text || ''
+      if (!responseText && Array.isArray(data.output)) {
+        for (const item of data.output) {
+          if (item.type === 'message' && Array.isArray(item.content)) {
+            for (const part of item.content) {
+              if (part.type === 'output_text' && part.text) {
+                responseText = part.text
+                break
+              }
+            }
+          }
+          if (responseText) {
+            break
+          }
+        }
+      }
+      const usage = data.usage || {}
 
       logger.info(
         `✅ OpenAI-Responses account test successful for ${accountId}, duration: ${duration}ms`

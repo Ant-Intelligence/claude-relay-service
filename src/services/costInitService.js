@@ -118,14 +118,7 @@ class CostInitService {
       )
     }
 
-    // 写入每小时费用
-    for (const [hour, cost] of hourlyCosts) {
-      const key = `usage:cost:hourly:${apiKeyId}:${hour}`
-      promises.push(
-        client.set(key, cost.toString()),
-        client.expire(key, 86400 * 7) // 7天过期
-      )
-    }
+    // hourly 费用统计已关闭，跳过写入
 
     // 计算总费用
     let totalCost = 0

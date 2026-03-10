@@ -99,7 +99,7 @@ class ClaudeAccountService {
       unifiedClientId = '', // 统一的客户端标识
       expiresAt = null, // 账户订阅到期时间
       extInfo = null, // 额外扩展信息
-      maxStableSessions = 1, // 稳定账户最大会话数
+      maxStableSessions = 1, // 稳定账户期望会话数（软限制，仅控制新会话准入）
       stableInactivityMinutes = 5 // 稳定账户不活跃超时（分钟）
     } = options
 
@@ -2158,7 +2158,7 @@ class ClaudeAccountService {
           organizationType: profileData.organization?.organization_type,
 
           // 账号类型：Enterprise 组织按 Max 能力处理，确保可调度 Opus
-          accountType: hasClaudeMax ? 'claude_max' : hasClaudePro ? 'claude_pro' : 'free',
+          accountType: hasClaudeMax ? 'claude_max' : hasClaudePro ? 'claude_pro' : 'claude_max',
 
           // 更新时间
           profileFetchedAt: new Date().toISOString()
