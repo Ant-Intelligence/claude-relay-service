@@ -599,7 +599,9 @@ class OpenAIResponsesAccountService {
               }
             }
           }
-          if (responseText) break
+          if (responseText) {
+            break
+          }
         }
       }
       const usage = data.usage || {}
