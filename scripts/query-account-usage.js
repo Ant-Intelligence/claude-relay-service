@@ -41,7 +41,9 @@ const ALL_ACCOUNT_PREFIXES = [
 
 // ========== 参数解析 ==========
 function buildRedisUrl() {
-  if (process.env.REDIS_URL) return process.env.REDIS_URL
+  if (process.env.REDIS_URL) {
+    return process.env.REDIS_URL
+  }
   const host = process.env.REDIS_HOST || 'localhost'
   const port = process.env.REDIS_PORT || '6379'
   const password = process.env.REDIS_PASSWORD
@@ -148,17 +150,25 @@ function loadPricing() {
 }
 
 function getModelPrice(pricingData, modelName) {
-  if (!pricingData || !modelName) return null
+  if (!pricingData || !modelName) {
+    return null
+  }
 
   // 1) exact match
-  if (pricingData[modelName]) return pricingData[modelName]
+  if (pricingData[modelName]) {
+    return pricingData[modelName]
+  }
 
   // 2) fuzzy match (normalize dots/hyphens/underscores)
   const norm = modelName.toLowerCase().replace(/[_\-.]/g, '')
   for (const [key, val] of Object.entries(pricingData)) {
-    if (key.includes('/')) continue
+    if (key.includes('/')) {
+      continue
+    }
     const nk = key.toLowerCase().replace(/[_\-.]/g, '')
-    if (nk.includes(norm) || norm.includes(nk)) return val
+    if (nk.includes(norm) || norm.includes(nk)) {
+      return val
+    }
   }
   return null
 }
@@ -170,8 +180,12 @@ function calcModelCost(pricing, tokens) {
   let cacheReadPrice = pricing.cache_read_input_token_cost
 
   // Claude fallback multipliers
-  if (cacheCreatePrice === undefined) cacheCreatePrice = inputPrice * 1.25
-  if (cacheReadPrice === undefined) cacheReadPrice = inputPrice * 0.1
+  if (cacheCreatePrice === undefined) {
+    cacheCreatePrice = inputPrice * 1.25
+  }
+  if (cacheReadPrice === undefined) {
+    cacheReadPrice = inputPrice * 0.1
+  }
 
   const inputCost = tokens.inputTokens * inputPrice
   const outputCost = tokens.outputTokens * outputPrice
@@ -206,15 +220,25 @@ function fmtNum(n) {
 }
 
 function fmtTokens(n) {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
+  if (n >= 1e9) {
+    return `${(n / 1e9).toFixed(2)}B`
+  }
+  if (n >= 1e6) {
+    return `${(n / 1e6).toFixed(1)}M`
+  }
+  if (n >= 1e3) {
+    return `${(n / 1e3).toFixed(1)}K`
+  }
   return String(n)
 }
 
 function fmtCost(c) {
-  if (c >= 1) return `$${c.toFixed(2)}`
-  if (c >= 0.001) return `$${c.toFixed(4)}`
+  if (c >= 1) {
+    return `$${c.toFixed(2)}`
+  }
+  if (c >= 0.001) {
+    return `$${c.toFixed(4)}`
+  }
   return `$${c.toFixed(6)}`
 }
 
@@ -234,7 +258,9 @@ async function findAccount(redis, name, allTypes) {
 
   for (const prefix of prefixes) {
     const keys = await fetchKeys(redis, `${prefix}*`)
-    if (keys.length === 0) continue
+    if (keys.length === 0) {
+      continue
+    }
 
     // Use pipeline to batch hget calls for performance (critical over SSH tunnels)
     const pipeline = redis.pipeline()
@@ -247,7 +273,9 @@ async function findAccount(redis, name, allTypes) {
     const matchedIndices = []
     for (let i = 0; i < keys.length; i++) {
       const acctName = nameResults[i]?.[1]
-      if (!acctName) continue
+      if (!acctName) {
+        continue
+      }
       if (acctName.toLowerCase().includes(nameLower)) {
         matchedIndices.push(i)
       }
@@ -499,7 +527,9 @@ function printReport(account, date, usage, pricingData) {
     console.log(pH)
     console.log(SEP)
     for (const mc of modelCosts) {
-      if (!mc.cost) continue
+      if (!mc.cost) {
+        continue
+      }
       const p = mc.cost.pricing
       const line = `  ${padR(mc.model, 32)}${padL(`$${p.input.toFixed(2)}`, 10)}${padL(`$${p.output.toFixed(2)}`, 11)}${padL(`$${p.cacheCreate.toFixed(2)}`, 11)}${padL(`$${p.cacheRead.toFixed(2)}`, 11)}${padL(fmtCost(mc.cost.inputCost), 11)}${padL(fmtCost(mc.cost.outputCost), 11)}${padL(fmtCost(mc.cost.cacheCreateCost), 11)}${padL(fmtCost(mc.cost.cacheReadCost), 11)}`
       console.log(line)
@@ -664,7 +694,9 @@ async function main() {
     console.error(`❌ Error: ${err.message}`)
     process.exit(1)
   } finally {
-    if (redis) await redis.quit()
+    if (redis) {
+      await redis.quit()
+    }
   }
 }
 
