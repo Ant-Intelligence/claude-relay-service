@@ -5,6 +5,12 @@ const apiKeyService = require('../services/apiKeyService')
 const CostCalculator = require('../utils/costCalculator')
 const claudeAccountService = require('../services/claudeAccountService')
 const openaiAccountService = require('../services/openaiAccountService')
+const {
+  createClaudeTestPayload,
+  extractErrorMessage,
+  sanitizeErrorMsg
+} = require('../utils/testPayloadHelper')
+const { getSafeMessage } = require('../utils/errorSanitizer')
 
 const router = express.Router()
 
