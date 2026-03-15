@@ -4087,12 +4087,7 @@ const form = ref({
 
 // 模型限制配置
 const modelRestrictionMode = ref('whitelist') // 'whitelist' 或 'mapping'
-const allowedModels = ref([
-  // 默认勾选所有 Sonnet 和 Haiku 模型
-  'claude-sonnet-4-20250514',
-  'claude-sonnet-4-5-20250929',
-  'claude-3-5-haiku-20241022'
-]) // 白名单模式下选中的模型列表
+const allowedModels = ref([]) // 白名单模式下选中的模型列表（默认空 = 支持所有模型）
 
 // 常用模型列表
 const commonModels = [
@@ -4136,6 +4131,9 @@ const modelMappings = ref([])
 // 初始化模型映射表
 const initModelMappings = () => {
   if (props.account?.supportedModels) {
+    // 获取 commonModels 的合法值集合，用于过滤过时的模型 ID
+    const validModelValues = new Set(commonModels.map((m) => m.value))
+
     // 如果是对象格式（新的映射表）
     if (
       typeof props.account.supportedModels === 'object' &&
@@ -4143,30 +4141,29 @@ const initModelMappings = () => {
     ) {
       const entries = Object.entries(props.account.supportedModels)
 
-      // 判断是白名单模式还是映射模式
-      // 如果所有映射都是"映射到自己"，则视为白名单模式
-      const isWhitelist = entries.every(([from, to]) => from === to)
-      if (isWhitelist) {
-        modelRestrictionMode.value = 'whitelist'
-        // 白名单模式：设置 allowedModels（显示勾选的模型）
-        allowedModels.value = entries.map(([from]) => from)
-        // 同时保留 modelMappings（以便用户切换到映射模式时有初始数据）
-        modelMappings.value = entries.map(([from, to]) => ({ from, to }))
-      } else {
+      // 分离白名单条目（自映射 from===to）和真正的映射条目（from!==to）
+      const whitelistEntries = entries.filter(([from, to]) => from === to)
+      const mappingEntries = entries.filter(([from, to]) => from !== to)
+
+      if (mappingEntries.length > 0) {
+        // 有真正的映射条目 → 映射模式
         modelRestrictionMode.value = 'mapping'
-        // 映射模式：设置 modelMappings（显示映射表）
-        modelMappings.value = entries.map(([from, to]) => ({ from, to }))
-        // 不填充 allowedModels，因为映射模式不使用白名单复选框
+        modelMappings.value = mappingEntries.map(([from, to]) => ({ from, to }))
+        allowedModels.value = []
+      } else {
+        // 全部是自映射 → 白名单模式
+        modelRestrictionMode.value = 'whitelist'
+        // 只保留在 commonModels 中存在的模型，丢弃过时的模型 ID
+        allowedModels.value = whitelistEntries
+          .map(([from]) => from)
+          .filter((m) => validModelValues.has(m))
+        modelMappings.value = []
       }
     } else if (Array.isArray(props.account.supportedModels)) {
-      // 如果是数组格式（旧格式），转换为白名单模式
+      // 旧格式数组 → 白名单模式，同样过滤过时 ID
       modelRestrictionMode.value = 'whitelist'
-      allowedModels.value = props.account.supportedModels
-      // 同时设置 modelMappings 为自映射
-      modelMappings.value = props.account.supportedModels.map((model) => ({
-        from: model,
-        to: model
-      }))
+      allowedModels.value = props.account.supportedModels.filter((m) => validModelValues.has(m))
+      modelMappings.value = []
     }
   }
 }
