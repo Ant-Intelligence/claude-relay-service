@@ -3065,7 +3065,8 @@ router.post('/claude-accounts', authenticateAdmin, async (req, res) => {
       useUnifiedClientId,
       unifiedClientId,
       expiresAt,
-      extInfo
+      extInfo,
+      claudeCodeOnly
     } = req.body
 
     if (!name) {
@@ -3128,6 +3129,7 @@ router.post('/claude-accounts', authenticateAdmin, async (req, res) => {
       unifiedClientId: unifiedClientId || '', // 统一的客户端标识
       expiresAt: expiresAt || null, // 账户订阅到期时间
       extInfo: extInfo || null,
+      claudeCodeOnly: claudeCodeOnly === true, // 仅接收 Claude Code 请求
       maxStableSessions:
         maxStableSessions !== undefined && maxStableSessions !== null
           ? Number(maxStableSessions)
@@ -3660,7 +3662,8 @@ router.post('/claude-console-accounts', authenticateAdmin, async (req, res) => {
       groupId,
       dailyQuota,
       quotaResetTime,
-      maxConcurrentTasks
+      maxConcurrentTasks,
+      claudeCodeOnly: consoleClaudeCodeOnly
     } = req.body
 
     if (!name || !apiUrl || !apiKey) {
@@ -3730,6 +3733,7 @@ router.post('/claude-console-accounts', authenticateAdmin, async (req, res) => {
         maxConcurrentTasks !== undefined && maxConcurrentTasks !== null
           ? Number(maxConcurrentTasks)
           : 0,
+      claudeCodeOnly: consoleClaudeCodeOnly === true, // 仅接收 Claude Code 请求
       maxStableSessions:
         consoleMaxStableSessions !== undefined && consoleMaxStableSessions !== null
           ? Number(consoleMaxStableSessions)

@@ -1662,6 +1662,33 @@
               </label>
             </div>
 
+            <!-- 仅接收 Claude Code 请求 -->
+            <div
+              v-if="
+                form.platform === 'claude' ||
+                form.platform === 'claude-console' ||
+                form.platform === 'ccr'
+              "
+              class="mt-4"
+            >
+              <label class="flex items-start">
+                <input
+                  v-model="form.claudeCodeOnly"
+                  class="mt-1 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                  type="checkbox"
+                />
+                <div class="ml-3">
+                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    仅接收 Claude Code 请求
+                  </span>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    开启后该账户仅会被分配给 Claude Code 客户端（通过 User-Agent
+                    识别），其他客户端的请求将跳过此账户
+                  </p>
+                </div>
+              </label>
+            </div>
+
             <!-- Claude User-Agent 版本配置 -->
             <div v-if="form.platform === 'claude'" class="mt-4">
               <label class="flex items-start">
@@ -2710,6 +2737,33 @@
                 </span>
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   当系统检测到账户接近5小时使用限制时，自动暂停调度该账户。进入新的时间窗口后会自动恢复调度。
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <!-- 仅接收 Claude Code 请求（编辑模式） -->
+          <div
+            v-if="
+              form.platform === 'claude' ||
+              form.platform === 'claude-console' ||
+              form.platform === 'ccr'
+            "
+            class="mt-4"
+          >
+            <label class="flex items-start">
+              <input
+                v-model="form.claudeCodeOnly"
+                class="mt-1 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                type="checkbox"
+              />
+              <div class="ml-3">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  仅接收 Claude Code 请求
+                </span>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  开启后该账户仅会被分配给 Claude Code 客户端（通过 User-Agent
+                  识别），其他客户端的请求将跳过此账户
                 </p>
               </div>
             </label>
@@ -4003,6 +4057,7 @@ const form = ref({
   subscriptionType: 'claude_max', // 默认为 Claude Max，兼容旧数据
   autoStopOnWarning: props.account?.autoStopOnWarning || false, // 5小时限制自动停止调度
   useUnifiedUserAgent: props.account?.useUnifiedUserAgent || false, // 使用统一Claude Code版本
+  claudeCodeOnly: props.account?.claudeCodeOnly || false, // 仅接收 Claude Code 请求
   useUnifiedClientId: props.account?.useUnifiedClientId || false, // 使用统一的客户端标识
   unifiedClientId: props.account?.unifiedClientId || '', // 统一的客户端标识
   groupId: '',
@@ -4619,6 +4674,7 @@ const buildClaudeAccountData = (tokenInfo, accountName, clientId) => {
     claudeAiOauth: claudeOauthPayload,
     priority: form.value.priority || 50,
     autoStopOnWarning: form.value.autoStopOnWarning || false,
+    claudeCodeOnly: form.value.claudeCodeOnly || false,
     useUnifiedUserAgent: form.value.useUnifiedUserAgent || false,
     useUnifiedClientId: form.value.useUnifiedClientId || false,
     unifiedClientId: clientId,
@@ -4762,6 +4818,7 @@ const handleOAuthSuccess = async (tokenInfoOrList) => {
       }
       data.priority = form.value.priority || 50
       data.autoStopOnWarning = form.value.autoStopOnWarning || false
+      data.claudeCodeOnly = form.value.claudeCodeOnly || false
       data.useUnifiedUserAgent = form.value.useUnifiedUserAgent || false
       data.useUnifiedClientId = form.value.useUnifiedClientId || false
       data.unifiedClientId = form.value.unifiedClientId || ''
@@ -5081,6 +5138,7 @@ const createAccount = async () => {
       }
       data.priority = form.value.priority || 50
       data.autoStopOnWarning = form.value.autoStopOnWarning || false
+      data.claudeCodeOnly = form.value.claudeCodeOnly || false
       data.useUnifiedUserAgent = form.value.useUnifiedUserAgent || false
       data.useUnifiedClientId = form.value.useUnifiedClientId || false
       data.unifiedClientId = form.value.unifiedClientId || ''
@@ -5181,6 +5239,8 @@ const createAccount = async () => {
       data.quotaResetTime = form.value.quotaResetTime || '00:00'
       // 并发控制字段
       data.maxConcurrentTasks = form.value.maxConcurrentTasks || 0
+      // 仅接收 Claude Code 请求
+      data.claudeCodeOnly = form.value.claudeCodeOnly || false
       // 稳定账户字段
       if (form.value.accountType === 'stable') {
         data.maxStableSessions = form.value.maxStableSessions || 1
@@ -5468,6 +5528,7 @@ const updateAccount = async () => {
 
       data.priority = form.value.priority || 50
       data.autoStopOnWarning = form.value.autoStopOnWarning || false
+      data.claudeCodeOnly = form.value.claudeCodeOnly || false
       data.useUnifiedUserAgent = form.value.useUnifiedUserAgent || false
       data.useUnifiedClientId = form.value.useUnifiedClientId || false
       data.unifiedClientId = form.value.unifiedClientId || ''
@@ -5516,6 +5577,8 @@ const updateAccount = async () => {
       data.quotaResetTime = form.value.quotaResetTime || '00:00'
       // 并发控制字段
       data.maxConcurrentTasks = form.value.maxConcurrentTasks || 0
+      // 仅接收 Claude Code 请求
+      data.claudeCodeOnly = form.value.claudeCodeOnly || false
       // 稳定账户字段
       data.maxStableSessions = form.value.maxStableSessions || 1
       data.stableInactivityMinutes = form.value.stableInactivityMinutes ?? 5
@@ -6082,6 +6145,7 @@ watch(
         accountType: newAccount.accountType || 'shared',
         subscriptionType: subscriptionType,
         autoStopOnWarning: newAccount.autoStopOnWarning || false,
+        claudeCodeOnly: newAccount.claudeCodeOnly || false,
         useUnifiedUserAgent: newAccount.useUnifiedUserAgent || false,
         useUnifiedClientId: newAccount.useUnifiedClientId || false,
         unifiedClientId: newAccount.unifiedClientId || '',

@@ -201,6 +201,9 @@ const authenticateApiKey = async (req, res, next) => {
       )
     }
 
+    // 🔍 无条件检测 Claude Code 客户端（用于账户级调度过滤）
+    const isClaudeCode = /^claude-cli\//i.test(req.headers['user-agent'] || '')
+
     // 提高监听器上限，避免 MaxListenersExceededWarning
     // 请求生命周期中多个中间件和服务会注册 close/error/finish 监听器（并发追踪、资源清理、日志等），
     // 这些监听器随请求对象结束后被 GC 回收，不是内存泄漏
@@ -669,7 +672,8 @@ const authenticateApiKey = async (req, res, next) => {
       boosterPackAmount: validation.keyData.boosterPackAmount, // 加油包总金额
       boosterPackUsed: validation.keyData.boosterPackUsed, // 加油包已使用金额
       useBooster: req.useBooster || false, // 是否使用加油包
-      usage: validation.keyData.usage
+      usage: validation.keyData.usage,
+      isClaudeCode // 是否为 Claude Code 客户端
     }
     req.usage = validation.keyData.usage
 

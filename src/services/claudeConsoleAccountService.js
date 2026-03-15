@@ -77,7 +77,8 @@ class ClaudeConsoleAccountService {
       quotaResetTime = '00:00', // 额度重置时间（HH:mm格式）
       maxConcurrentTasks = 0, // 最大并发任务数，0表示无限制
       maxStableSessions = 1, // 稳定账户期望会话数（软限制，仅控制新会话准入）
-      stableInactivityMinutes = 5 // 稳定账户不活跃超时（分钟）
+      stableInactivityMinutes = 5, // 稳定账户不活跃超时（分钟）
+      claudeCodeOnly = false // 仅接收 Claude Code 请求
     } = options
 
     // 验证必填字段
@@ -128,7 +129,9 @@ class ClaudeConsoleAccountService {
       maxConcurrentTasks: maxConcurrentTasks.toString(), // 最大并发任务数，0表示无限制
       // 稳定账户配置
       maxStableSessions: maxStableSessions.toString(),
-      stableInactivityMinutes: stableInactivityMinutes.toString()
+      stableInactivityMinutes: stableInactivityMinutes.toString(),
+      // 仅接收 Claude Code 请求
+      claudeCodeOnly: claudeCodeOnly.toString()
     }
 
     const client = redis.getClientSafe()
@@ -274,7 +277,9 @@ class ClaudeConsoleAccountService {
               accountData.stableInactivityMinutes !== undefined &&
               accountData.stableInactivityMinutes !== ''
                 ? parseInt(accountData.stableInactivityMinutes)
-                : 5
+                : 5,
+            // 仅接收 Claude Code 请求
+            claudeCodeOnly: accountData.claudeCodeOnly === 'true'
           })
         }
       }
@@ -466,6 +471,10 @@ class ClaudeConsoleAccountService {
       }
       if (updates.stableInactivityMinutes !== undefined) {
         updatedData.stableInactivityMinutes = updates.stableInactivityMinutes.toString()
+      }
+      // 仅接收 Claude Code 请求
+      if (updates.claudeCodeOnly !== undefined) {
+        updatedData.claudeCodeOnly = updates.claudeCodeOnly.toString()
       }
 
       // ✅ 直接保存 subscriptionExpiresAt（如果提供）

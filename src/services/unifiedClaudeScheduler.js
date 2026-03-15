@@ -603,6 +603,12 @@ class UnifiedClaudeScheduler {
       ) {
         // 检查是否可调度
 
+        // 仅限 Claude Code 的账户：非 CC 请求跳过
+        if (account.claudeCodeOnly === 'true' && !apiKeyData.isClaudeCode) {
+          logger.debug(`⏭️ Skipping Claude Code-only account ${account.name} for non-CC client`)
+          continue
+        }
+
         // 检查模型支持
         if (!this._isModelSupportedByAccount(account, 'claude-official', requestedModel)) {
           continue
@@ -708,6 +714,14 @@ class UnifiedClaudeScheduler {
         this._isSchedulable(currentAccount.schedulable)
       ) {
         // 检查是否可调度
+
+        // 仅限 Claude Code 的账户：非 CC 请求跳过
+        if (currentAccount.claudeCodeOnly === 'true' && !apiKeyData.isClaudeCode) {
+          logger.debug(
+            `⏭️ Skipping Claude Code-only Console account ${currentAccount.name} for non-CC client`
+          )
+          continue
+        }
 
         // 检查订阅是否过期
         if (claudeConsoleAccountService.isSubscriptionExpired(currentAccount)) {

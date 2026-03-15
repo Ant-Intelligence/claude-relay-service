@@ -100,7 +100,8 @@ class ClaudeAccountService {
       expiresAt = null, // 账户订阅到期时间
       extInfo = null, // 额外扩展信息
       maxStableSessions = 1, // 稳定账户期望会话数（软限制，仅控制新会话准入）
-      stableInactivityMinutes = 5 // 稳定账户不活跃超时（分钟）
+      stableInactivityMinutes = 5, // 稳定账户不活跃超时（分钟）
+      claudeCodeOnly = false // 仅接收 Claude Code 请求
     } = options
 
     const accountId = uuidv4()
@@ -148,7 +149,9 @@ class ClaudeAccountService {
         extInfo: normalizedExtInfo ? JSON.stringify(normalizedExtInfo) : '',
         // 稳定账户配置
         maxStableSessions: maxStableSessions.toString(),
-        stableInactivityMinutes: stableInactivityMinutes.toString()
+        stableInactivityMinutes: stableInactivityMinutes.toString(),
+        // 仅接收 Claude Code 请求
+        claudeCodeOnly: claudeCodeOnly.toString()
       }
     } else {
       // 兼容旧格式
@@ -183,7 +186,9 @@ class ClaudeAccountService {
         extInfo: normalizedExtInfo ? JSON.stringify(normalizedExtInfo) : '',
         // 稳定账户配置
         maxStableSessions: maxStableSessions.toString(),
-        stableInactivityMinutes: stableInactivityMinutes.toString()
+        stableInactivityMinutes: stableInactivityMinutes.toString(),
+        // 仅接收 Claude Code 请求
+        claudeCodeOnly: claudeCodeOnly.toString()
       }
     }
 
@@ -605,7 +610,9 @@ class ClaudeAccountService {
               account.stableInactivityMinutes !== undefined &&
               account.stableInactivityMinutes !== ''
                 ? parseInt(account.stableInactivityMinutes)
-                : 5
+                : 5,
+            // 仅接收 Claude Code 请求
+            claudeCodeOnly: account.claudeCodeOnly === 'true'
           }
         })
       )
@@ -699,7 +706,8 @@ class ClaudeAccountService {
         'subscriptionExpiresAt',
         'extInfo',
         'maxStableSessions',
-        'stableInactivityMinutes'
+        'stableInactivityMinutes',
+        'claudeCodeOnly'
       ]
       const updatedData = { ...accountData }
       let shouldClearAutoStopFields = false
