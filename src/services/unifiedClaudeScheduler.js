@@ -92,12 +92,8 @@ class UnifiedClaudeScheduler {
       }
     }
 
-    // Claude Console 账户的模型支持检查（稳定账户使用 Claude 默认模型配置，跳过 supportedModels 检查）
-    if (
-      accountType === 'claude-console' &&
-      account.accountType !== 'stable' &&
-      account.supportedModels
-    ) {
+    // Claude Console 账户的模型支持检查
+    if (accountType === 'claude-console' && account.supportedModels) {
       // 兼容旧格式（数组）和新格式（对象）
       if (Array.isArray(account.supportedModels)) {
         // 旧格式：数组
