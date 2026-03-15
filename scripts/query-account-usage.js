@@ -25,10 +25,10 @@ const fs = require('fs')
 const path = require('path')
 
 // ========== 账户类型前缀 ==========
-const CLAUDE_ACCOUNT_PREFIXES = ['claude_account:', 'claude_console_account:']
+const CLAUDE_ACCOUNT_PREFIXES = ['claude:account:', 'claude_console_account:']
 
 const ALL_ACCOUNT_PREFIXES = [
-  'claude_account:',
+  'claude:account:',
   'claude_console_account:',
   'bedrock_account:',
   'gemini_account:',
