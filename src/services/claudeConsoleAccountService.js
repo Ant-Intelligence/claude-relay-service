@@ -365,6 +365,7 @@ class ClaudeConsoleAccountService {
       accountData.stableInactivityMinutes !== ''
         ? parseInt(accountData.stableInactivityMinutes)
         : 5
+    accountData.claudeCodeOnly = accountData.claudeCodeOnly === 'true'
 
     logger.debug(
       `[DEBUG] Final account data - name: ${accountData.name}, hasApiUrl: ${!!accountData.apiUrl}, hasApiKey: ${!!accountData.apiKey}, supportedModels: ${JSON.stringify(accountData.supportedModels)}`

@@ -716,7 +716,7 @@ class UnifiedClaudeScheduler {
         // 检查是否可调度
 
         // 仅限 Claude Code 的账户：非 CC 请求跳过
-        if (currentAccount.claudeCodeOnly === 'true' && !apiKeyData.isClaudeCode) {
+        if (currentAccount.claudeCodeOnly === true && !apiKeyData.isClaudeCode) {
           logger.debug(
             `⏭️ Skipping Claude Code-only Console account ${currentAccount.name} for non-CC client`
           )
