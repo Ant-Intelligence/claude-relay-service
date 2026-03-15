@@ -91,7 +91,12 @@ router.post('/auth/login', async (req, res) => {
       lastActivity: new Date().toISOString()
     }
 
-    await redis.setSession(sessionId, sessionData, config.security.adminSessionTimeout)
+    // adminSessionTimeout 配置值为毫秒，Redis EXPIRE 接受秒
+    await redis.setSession(
+      sessionId,
+      sessionData,
+      Math.floor(config.security.adminSessionTimeout / 1000)
+    )
 
     // 不再更新 Redis 中的最后登录时间，因为 Redis 只是缓存
     // init.json 是唯一真实数据源
@@ -362,7 +367,12 @@ router.post('/auth/refresh', async (req, res) => {
 
     // 更新最后活动时间
     sessionData.lastActivity = new Date().toISOString()
-    await redis.setSession(token, sessionData, config.security.adminSessionTimeout)
+    // adminSessionTimeout 配置值为毫秒，Redis EXPIRE 接受秒
+    await redis.setSession(
+      token,
+      sessionData,
+      Math.floor(config.security.adminSessionTimeout / 1000)
+    )
 
     return res.json({
       success: true,
