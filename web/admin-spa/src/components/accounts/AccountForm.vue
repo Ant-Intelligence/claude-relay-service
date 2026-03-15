@@ -4087,12 +4087,7 @@ const form = ref({
 
 // 模型限制配置
 const modelRestrictionMode = ref('whitelist') // 'whitelist' 或 'mapping'
-const allowedModels = ref([
-  // 默认勾选所有 Sonnet 和 Haiku 模型
-  'claude-sonnet-4-20250514',
-  'claude-sonnet-4-5-20250929',
-  'claude-3-5-haiku-20241022'
-]) // 白名单模式下选中的模型列表
+const allowedModels = ref([]) // 白名单模式下选中的模型列表（默认空 = 支持所有模型）
 
 // 常用模型列表
 const commonModels = [
