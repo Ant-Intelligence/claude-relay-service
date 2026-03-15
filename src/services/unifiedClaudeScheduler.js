@@ -49,7 +49,7 @@ class UnifiedClaudeScheduler {
         requestedModel.includes('haiku')
 
       if (!isClaudeOfficialModel) {
-        logger.info(
+        logger.debug(
           `🚫 Claude official account ${account.name} does not support non-Claude model ${requestedModel}${context ? ` ${context}` : ''}`
         )
         return false
@@ -66,7 +66,7 @@ class UnifiedClaudeScheduler {
 
             // Pro 和 Free 账号不支持 Opus
             if (info.hasClaudePro === true && info.hasClaudeMax !== true) {
-              logger.info(
+              logger.debug(
                 `🚫 Claude account ${account.name} (Pro) does not support Opus model${context ? ` ${context}` : ''}`
               )
               return false
@@ -76,7 +76,7 @@ class UnifiedClaudeScheduler {
               info.accountType === 'claude_free' ||
               info.accountType === 'free'
             ) {
-              logger.info(
+              logger.debug(
                 `🚫 Claude account ${account.name} (${info.accountType}) does not support Opus model${context ? ` ${context}` : ''}`
               )
               return false
@@ -101,7 +101,7 @@ class UnifiedClaudeScheduler {
           account.supportedModels.length > 0 &&
           !account.supportedModels.includes(requestedModel)
         ) {
-          logger.info(
+          logger.debug(
             `🚫 Claude Console account ${account.name} does not support model ${requestedModel}${context ? ` ${context}` : ''}`
           )
           return false
@@ -112,7 +112,7 @@ class UnifiedClaudeScheduler {
           Object.keys(account.supportedModels).length > 0 &&
           !claudeConsoleAccountService.isModelSupported(account.supportedModels, requestedModel)
         ) {
-          logger.info(
+          logger.debug(
             `🚫 Claude Console account ${account.name} does not support model ${requestedModel}${context ? ` ${context}` : ''}`
           )
           return false
@@ -129,7 +129,7 @@ class UnifiedClaudeScheduler {
           account.supportedModels.length > 0 &&
           !account.supportedModels.includes(requestedModel)
         ) {
-          logger.info(
+          logger.debug(
             `🚫 CCR account ${account.name} does not support model ${requestedModel}${context ? ` ${context}` : ''}`
           )
           return false
@@ -140,7 +140,7 @@ class UnifiedClaudeScheduler {
           Object.keys(account.supportedModels).length > 0 &&
           !ccrAccountService.isModelSupported(account.supportedModels, requestedModel)
         ) {
-          logger.info(
+          logger.debug(
             `🚫 CCR account ${account.name} does not support model ${requestedModel}${context ? ` ${context}` : ''}`
           )
           return false
@@ -677,6 +677,11 @@ class UnifiedClaudeScheduler {
     const accountsNeedingConcurrencyCheck = []
 
     for (const account of consoleAccounts) {
+      // 提前检查模型支持（纯内存操作，避免对不支持该模型的账户做无意义的 Redis 查询）
+      if (!this._isModelSupportedByAccount(account, 'claude-console', requestedModel)) {
+        continue
+      }
+
       // 主动检查封禁状态并尝试恢复（在过滤之前执行，确保可以恢复被封禁的账户）
       const wasBlocked = await claudeConsoleAccountService.isAccountBlocked(account.id)
 
@@ -703,11 +708,6 @@ class UnifiedClaudeScheduler {
         this._isSchedulable(currentAccount.schedulable)
       ) {
         // 检查是否可调度
-
-        // 检查模型支持
-        if (!this._isModelSupportedByAccount(currentAccount, 'claude-console', requestedModel)) {
-          continue
-        }
 
         // 检查订阅是否过期
         if (claudeConsoleAccountService.isSubscriptionExpired(currentAccount)) {
