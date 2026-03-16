@@ -246,9 +246,16 @@ class UnifiedClaudeScheduler {
           logger.info(
             `🎯 Using bound dedicated Claude Console account: ${boundConsoleAccount.name} (${apiKeyData.claudeConsoleAccountId}) for API key ${apiKeyData.name}`
           )
+          const dedicatedConsoleAccount = {
+            ...boundConsoleAccount,
+            accountId: apiKeyData.claudeConsoleAccountId,
+            accountType: 'claude-console',
+            priority: parseInt(boundConsoleAccount.priority) || 50
+          }
           return {
             accountId: apiKeyData.claudeConsoleAccountId,
-            accountType: 'claude-console'
+            accountType: 'claude-console',
+            consoleAccounts: [dedicatedConsoleAccount]
           }
         } else {
           logger.warn(
@@ -436,6 +443,54 @@ class UnifiedClaudeScheduler {
       return sorted
     } catch (error) {
       logger.error('Failed to get console fallbacks:', error)
+      return []
+    }
+  }
+
+  /**
+   * 为分组内的粘性会话命中场景构建 Console fallback 列表
+   * 仅扫描分组成员（不查全局池），避免越权调度
+   * @param {Array<string>} memberIds - 分组成员ID列表
+   * @param {string} requestedModel - 请求的模型
+   * @param {string} stickyAccountId - 粘性命中的账户ID（放在列表首位）
+   * @returns {Promise<Array>} 排序后的 Console 账户列表
+   */
+  async _getGroupConsoleFallbacks(memberIds, requestedModel, stickyAccountId) {
+    try {
+      const accounts = []
+      for (const memberId of memberIds) {
+        const account = await claudeConsoleAccountService.getAccount(memberId)
+        if (
+          account &&
+          account.isActive === true &&
+          account.status === 'active' &&
+          this._isSchedulable(account.schedulable)
+        ) {
+          if (!this._isModelSupportedByAccount(account, 'claude-console', requestedModel)) {
+            continue
+          }
+          accounts.push({
+            ...account,
+            accountId: account.id,
+            accountType: 'claude-console',
+            priority: parseInt(account.priority) || 50,
+            lastUsedAt: account.lastUsedAt || '0'
+          })
+        }
+      }
+
+      const sorted = this._sortAccountsByPriority(accounts)
+
+      // 确保 sticky 账户在首位
+      const stickyIndex = sorted.findIndex((a) => a.accountId === stickyAccountId)
+      if (stickyIndex > 0) {
+        const [stickyAccount] = sorted.splice(stickyIndex, 1)
+        sorted.unshift(stickyAccount)
+      }
+
+      return sorted
+    } catch (error) {
+      logger.error('Failed to get group console fallbacks:', error)
       return []
     }
   }
@@ -1668,6 +1723,14 @@ class UnifiedClaudeScheduler {
                 logger.info(
                   `🎯 Using sticky session account from group: ${mappedAccount.accountId} (${mappedAccount.accountType}) for session ${sessionHash}`
                 )
+                // Console 账户：构建 group 成员 fallback 列表供重试服务使用
+                if (mappedAccount.accountType === 'claude-console') {
+                  mappedAccount.consoleAccounts = await this._getGroupConsoleFallbacks(
+                    memberIds,
+                    requestedModel,
+                    mappedAccount.accountId
+                  )
+                }
                 return mappedAccount
               } else {
                 logger.info(
@@ -1923,10 +1986,17 @@ class UnifiedClaudeScheduler {
         `🎯 Selected account from group ${group.name}: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with priority ${selectedAccount.priority}`
       )
 
-      return {
+      const result = {
         accountId: selectedAccount.accountId,
         accountType: selectedAccount.accountType
       }
+
+      // Console 账户：附加排序列表供重试服务使用
+      if (selectedAccount.accountType === 'claude-console') {
+        result.consoleAccounts = sortedAccounts.filter((a) => a.accountType === 'claude-console')
+      }
+
+      return result
     } catch (error) {
       logger.error(`❌ Failed to select account from group ${groupId}:`, error)
       throw error
