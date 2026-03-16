@@ -8,7 +8,7 @@ const requestFailureAlertService = require('./requestFailureAlertService')
 /**
  * Claude Console 账户的多轮重试服务
  * 负责：
- * 1. 轮流尝试所有可用的Console账户
+ * 1. 按调度器预排序的账户列表轮流尝试
  * 2. 全部账户失败后进行多轮重试
  * 3. 每次失败发送webhook告警
  * 4. 返回200/201响应或最终失败
@@ -21,6 +21,9 @@ class ConsoleAccountRetryService {
    * @param {Object} apiKeyData - API Key数据
    * @param {boolean} isStream - 是否为流式请求
    * @param {Object} options - 配置选项
+   * @param {Array} options.orderedAccounts - 调度器预排序的Console账户列表（sticky账户在首位）
+   * @param {string|null} options.sessionHash - 会话哈希
+   * @param {Function|null} options.usageCallback - usage回调函数
    * @returns {boolean} 是否已处理（true表示已发送响应）
    */
   async handleConsoleRequestWithRetry(req, res, apiKeyData, isStream = false, options = {}) {
@@ -33,9 +36,12 @@ class ConsoleAccountRetryService {
       baseDelay = 2000,
       maxDelay = 120000,
       usageCallback = null,
-      stickyAccountId = null,
+      orderedAccounts = [],
       sessionHash = null
     } = options
+
+    // 原粘性绑定的账户ID：列表首位即调度器选中的账户
+    const stickyAccountId = orderedAccounts.length > 0 ? orderedAccounts[0].accountId : null
 
     try {
       // 定义失败回调：发送webhook告警（经过节流服务）
@@ -72,12 +78,8 @@ class ConsoleAccountRetryService {
           logger.info(`🔄 Starting Console account retry loop, round 1/${maxRetries}`)
         }
 
-        // 获取可用的Console账户（粘性会话账户优先）
-        const availableAccounts = await this._getAvailableConsoleAccounts(
-          apiKeyData,
-          req.body?.model,
-          stickyAccountId
-        )
+        // 使用调度器预排序的账户列表（避免重复 Redis 扫描）
+        const availableAccounts = orderedAccounts
 
         if (availableAccounts.length === 0) {
           throw new AllRetriesFailed('No available Claude Console accounts', {
@@ -278,55 +280,6 @@ class ConsoleAccountRetryService {
         })
       }
       return true
-    }
-  }
-
-  /**
-   * 获取所有可用的Claude Console账户
-   * @param {Object} apiKeyData - API Key数据
-   * @param {string} requestedModel - 请求的模型
-   * @param {string|null} stickyAccountId - 粘性会话绑定的账户ID（优先使用）
-   * @returns {Promise<Array>} 可用账户列表（粘性账户优先，其余按优先级排序）
-   */
-  async _getAvailableConsoleAccounts(apiKeyData, requestedModel = null, stickyAccountId = null) {
-    try {
-      // 使用unifiedClaudeScheduler的现有逻辑来获取Console账户
-      const availableAccounts = await unifiedClaudeScheduler._getAllAvailableAccounts(
-        apiKeyData,
-        requestedModel,
-        false
-      )
-
-      // 过滤出只有Console类型的账户
-      const consoleAccounts = availableAccounts.filter(
-        (acc) => acc.accountType === 'claude-console'
-      )
-
-      // 🔧 按优先级排序（复用调度器的排序逻辑，确保高优先级账户先被尝试）
-      const sorted = unifiedClaudeScheduler._sortAccountsByPriority(consoleAccounts)
-
-      // 🎯 粘性会话：将绑定的账户移到列表最前面，确保优先使用以利用缓存
-      if (stickyAccountId) {
-        const stickyIndex = sorted.findIndex((acc) => acc.accountId === stickyAccountId)
-        if (stickyIndex > 0) {
-          const [stickyAccount] = sorted.splice(stickyIndex, 1)
-          sorted.unshift(stickyAccount)
-          logger.info(
-            `🎯 Sticky session: prioritized account ${stickyAccount.name} (${stickyAccountId}) for cache reuse`
-          )
-        } else if (stickyIndex === 0) {
-          logger.debug(`🎯 Sticky session: account ${stickyAccountId} already first in list`)
-        } else {
-          logger.warn(
-            `⚠️ Sticky session account ${stickyAccountId} not found in available accounts, falling back to priority order`
-          )
-        }
-      }
-
-      return sorted
-    } catch (error) {
-      logger.error('Failed to get available Console accounts:', error)
-      return []
     }
   }
 

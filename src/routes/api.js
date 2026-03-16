@@ -219,8 +219,9 @@ async function handleMessagesRequest(req, res) {
 
       // 使用统一调度选择账号（传递请求的模型）
       const requestedModel = req.body.model
+      let selection
       try {
-        const selection = await unifiedClaudeScheduler.selectAccountForApiKey(
+        selection = await unifiedClaudeScheduler.selectAccountForApiKey(
           req.apiKey,
           sessionHash,
           requestedModel
@@ -319,7 +320,7 @@ async function handleMessagesRequest(req, res) {
             req.apiKey,
             true /* isStream */,
             {
-              stickyAccountId: accountId,
+              orderedAccounts: selection.consoleAccounts,
               sessionHash,
               usageCallback: (usageData) => {
                 // 回调函数：当检测到完整usage数据时记录真实token使用量
@@ -548,8 +549,9 @@ async function handleMessagesRequest(req, res) {
 
       // 使用统一调度选择账号（传递请求的模型）
       const requestedModel = req.body.model
+      let selection
       try {
-        const selection = await unifiedClaudeScheduler.selectAccountForApiKey(
+        selection = await unifiedClaudeScheduler.selectAccountForApiKey(
           req.apiKey,
           sessionHash,
           requestedModel
@@ -592,7 +594,7 @@ async function handleMessagesRequest(req, res) {
           req.apiKey,
           false /* isStream */,
           {
-            stickyAccountId: accountId,
+            orderedAccounts: selection.consoleAccounts,
             sessionHash,
             usageCallback: (usageData) => {
               // 回调函数：记录非流式请求的 usage 统计

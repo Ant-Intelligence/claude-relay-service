@@ -16,8 +16,6 @@ jest.mock('../../src/utils/logger', () => ({
 }))
 
 jest.mock('../../src/services/unifiedClaudeScheduler', () => ({
-  _getAllAvailableAccounts: jest.fn(),
-  _sortAccountsByPriority: jest.fn((accounts) => accounts),
   _updateSessionActivity: jest.fn().mockResolvedValue(undefined),
   _setSessionMapping: jest.fn().mockResolvedValue(undefined),
   _addToStableAccountSessions: jest.fn().mockResolvedValue(undefined),
@@ -78,10 +76,6 @@ describe('ConsoleAccountRetryService', () => {
       cache_read_input_tokens: 0
     }
 
-    beforeEach(() => {
-      unifiedClaudeScheduler._getAllAvailableAccounts.mockResolvedValue([mockAccount])
-    })
-
     test('should call usageCallback when non-streaming request succeeds with usage data', async () => {
       const usageCallback = jest.fn()
 
@@ -98,7 +92,7 @@ describe('ConsoleAccountRetryService', () => {
         mockRes,
         mockApiKeyData,
         false, // isStream
-        { usageCallback }
+        { usageCallback, orderedAccounts: [mockAccount] }
       )
 
       expect(result).toBe(true)
@@ -126,7 +120,7 @@ describe('ConsoleAccountRetryService', () => {
         mockRes,
         mockApiKeyData,
         false,
-        { usageCallback }
+        { usageCallback, orderedAccounts: [mockAccount] }
       )
 
       expect(result).toBe(true)
@@ -151,7 +145,7 @@ describe('ConsoleAccountRetryService', () => {
         mockRes,
         mockApiKeyData,
         false,
-        { usageCallback }
+        { usageCallback, orderedAccounts: [mockAccount] }
       )
 
       // Should still return success despite callback error
@@ -166,7 +160,21 @@ describe('ConsoleAccountRetryService', () => {
       )
     })
 
-    test('should work without usageCallback option', async () => {
+    test('should work without orderedAccounts (returns 503)', async () => {
+      // With no orderedAccounts, the service should report no available accounts
+      const result = await consoleAccountRetryService.handleConsoleRequestWithRetry(
+        mockReq,
+        mockRes,
+        mockApiKeyData,
+        false
+        // No options — orderedAccounts defaults to []
+      )
+
+      expect(result).toBe(true)
+      expect(mockRes.status).toHaveBeenCalledWith(503)
+    })
+
+    test('should work with orderedAccounts and without usageCallback', async () => {
       claudeConsoleRelayService.relayConsoleMessages.mockResolvedValue({
         status: 200,
         data: {
@@ -179,8 +187,8 @@ describe('ConsoleAccountRetryService', () => {
         mockReq,
         mockRes,
         mockApiKeyData,
-        false
-        // No options
+        false,
+        { orderedAccounts: [mockAccount] }
       )
 
       expect(result).toBe(true)
