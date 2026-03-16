@@ -307,6 +307,14 @@ class UnifiedClaudeScheduler {
               logger.info(
                 `🎯 Using sticky session account: ${mappedAccount.accountId} (${mappedAccount.accountType}) for session ${sessionHash}`
               )
+              // Console 账户：附加 fallback 列表供重试服务使用
+              if (mappedAccount.accountType === 'claude-console') {
+                mappedAccount.consoleAccounts = await this._getConsoleFallbacks(
+                  apiKeyData,
+                  effectiveModel,
+                  mappedAccount.accountId
+                )
+              }
               return mappedAccount
             } else {
               logger.warn(
@@ -387,13 +395,48 @@ class UnifiedClaudeScheduler {
         `🎯 Selected account: ${selectedAccount.name} (${selectedAccount.accountId}, ${selectedAccount.accountType}) with priority ${selectedAccount.priority} for API key ${apiKeyData.name}`
       )
 
-      return {
+      const result = {
         accountId: selectedAccount.accountId,
         accountType: selectedAccount.accountType
       }
+
+      // Console 账户：附加完整的排序列表供重试服务使用（避免二次 Redis 扫描）
+      if (selectedAccount.accountType === 'claude-console') {
+        result.consoleAccounts = sortedAccounts.filter((a) => a.accountType === 'claude-console')
+      }
+
+      return result
     } catch (error) {
       logger.error('❌ Failed to select account for API key:', error)
       throw error
+    }
+  }
+
+  /**
+   * 为粘性会话命中场景构建 Console fallback 列表
+   * 仅在 sticky session hit 且账户类型为 claude-console 时调用
+   * @param {Object} apiKeyData - API Key 数据
+   * @param {string} effectiveModel - 请求的模型
+   * @param {string} stickyAccountId - 粘性命中的账户ID（放在列表首位）
+   * @returns {Promise<Array>} 排序后的 Console 账户列表（sticky 账户在首位）
+   */
+  async _getConsoleFallbacks(apiKeyData, effectiveModel, stickyAccountId) {
+    try {
+      const allAccounts = await this._getAllAvailableAccounts(apiKeyData, effectiveModel, false)
+      const consoleAccounts = allAccounts.filter((a) => a.accountType === 'claude-console')
+      const sorted = this._sortAccountsByPriority(consoleAccounts)
+
+      // 确保 sticky 账户在首位
+      const stickyIndex = sorted.findIndex((a) => a.accountId === stickyAccountId)
+      if (stickyIndex > 0) {
+        const [stickyAccount] = sorted.splice(stickyIndex, 1)
+        sorted.unshift(stickyAccount)
+      }
+
+      return sorted
+    } catch (error) {
+      logger.error('Failed to get console fallbacks:', error)
+      return []
     }
   }
 
