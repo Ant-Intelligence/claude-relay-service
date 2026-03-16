@@ -1281,7 +1281,9 @@ class UnifiedClaudeScheduler {
     const mappingValues = await client.mget(...keys)
 
     const now = Date.now()
-    const threshold = now - stableInactivityMinutes * 60000
+    // stableInactivityMinutes === 0 means "never expire due to inactivity"
+    const neverExpire = stableInactivityMinutes === 0
+    const threshold = neverExpire ? 0 : now - stableInactivityMinutes * 60000
     let activeCount = 0
     const expiredHashes = []
 
@@ -1294,7 +1296,7 @@ class UnifiedClaudeScheduler {
       try {
         const mapping = JSON.parse(mappingJSON)
         const lastActivity = mapping.lastActivity || 0
-        if (lastActivity > threshold) {
+        if (neverExpire || lastActivity > threshold) {
           activeCount++
         }
       } catch {
