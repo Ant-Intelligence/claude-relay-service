@@ -438,6 +438,16 @@ class UnifiedClaudeScheduler {
       if (stickyIndex > 0) {
         const [stickyAccount] = sorted.splice(stickyIndex, 1)
         sorted.unshift(stickyAccount)
+      } else if (stickyIndex === -1) {
+        // 粘性账户被稳定会话槽位检查过滤掉了（activeSlots >= maxStableSessions）
+        // 但该账户已经拥有当前会话，maxStableSessions 只应限制新会话，不应阻止已绑定的粘性会话
+        const stickyEntry = await this._buildConsoleAccountEntry(stickyAccountId)
+        if (stickyEntry) {
+          sorted.unshift(stickyEntry)
+          logger.debug(
+            `🔧 Sticky console account ${stickyEntry.name} (${stickyAccountId}) was filtered by slot capacity, re-added to fallback list for existing session`
+          )
+        }
       }
 
       return sorted
@@ -486,12 +496,60 @@ class UnifiedClaudeScheduler {
       if (stickyIndex > 0) {
         const [stickyAccount] = sorted.splice(stickyIndex, 1)
         sorted.unshift(stickyAccount)
+      } else if (stickyIndex === -1) {
+        // 粘性账户未在分组可用列表中（可能因状态检查或模型不匹配被过滤）
+        // 但该账户已经拥有当前会话，应优先尝试
+        const stickyEntry = await this._buildConsoleAccountEntry(stickyAccountId)
+        if (stickyEntry) {
+          sorted.unshift(stickyEntry)
+          logger.debug(
+            `🔧 Sticky console account ${stickyEntry.name} (${stickyAccountId}) was filtered in group fallbacks, re-added for existing session`
+          )
+        }
       }
 
       return sorted
     } catch (error) {
       logger.error('Failed to get group console fallbacks:', error)
       return []
+    }
+  }
+
+  /**
+   * 从 claudeConsoleAccountService 获取账户并构建调度器条目
+   * 仅做基本健康检查（active、非错误状态），跳过槽位容量检查
+   * 用于将被 _getAllAvailableAccounts 过滤掉的粘性账户重新加入 fallback 列表
+   * @param {string} accountId - 账户ID
+   * @returns {Promise<Object|null>} 账户条目或 null（账户不存在/不可用）
+   */
+  async _buildConsoleAccountEntry(accountId) {
+    try {
+      const account = await claudeConsoleAccountService.getAccount(accountId)
+      if (!account || !account.isActive) {
+        return null
+      }
+      // 仅排除硬性不可用状态（error/temp_error），保留 active/overloaded/unauthorized 让重试服务决定
+      if (account.status === 'error' || account.status === 'temp_error') {
+        return null
+      }
+      const isStable = account.accountType === 'stable'
+      return {
+        ...account,
+        accountId: account.id,
+        accountType: 'claude-console',
+        isStableAccount: isStable,
+        maxStableSessions: isStable ? parseInt(account.maxStableSessions) || 1 : undefined,
+        stableInactivityMinutes: isStable
+          ? account.stableInactivityMinutes !== undefined
+            ? parseInt(account.stableInactivityMinutes)
+            : 5
+          : undefined,
+        priority: parseInt(account.priority) || 50,
+        lastUsedAt: account.lastUsedAt || '0'
+      }
+    } catch (error) {
+      logger.error(`Failed to build console account entry for ${accountId}:`, error)
+      return null
     }
   }
 
