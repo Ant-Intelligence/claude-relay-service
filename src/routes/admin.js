@@ -6372,7 +6372,8 @@ router.get('/model-stats', authenticateAdmin, async (req, res) => {
           outputTokens: 0,
           cacheCreateTokens: 0,
           cacheReadTokens: 0,
-          allTokens: 0
+          allTokens: 0,
+          cost: 0
         }
 
         stats.requests += parseInt(data.requests) || 0
@@ -6381,6 +6382,7 @@ router.get('/model-stats', authenticateAdmin, async (req, res) => {
         stats.cacheCreateTokens += parseInt(data.cacheCreateTokens) || 0
         stats.cacheReadTokens += parseInt(data.cacheReadTokens) || 0
         stats.allTokens += parseInt(data.allTokens) || 0
+        stats.cost += parseFloat(data.cost) || 0
 
         modelStatsMap.set(normalizedModel, stats)
       }
@@ -6397,8 +6399,14 @@ router.get('/model-stats', authenticateAdmin, async (req, res) => {
         cache_read_input_tokens: stats.cacheReadTokens
       }
 
-      // 计算费用
-      const costData = CostCalculator.calculateCost(usage, model)
+      // 使用存储的实际费用（含200K+溢价）；旧数据回退到重算
+      const costData =
+        stats.cost > 0
+          ? (() => {
+              const fallback = CostCalculator.calculateCost(usage, model)
+              return { ...fallback, costs: { ...fallback.costs, total: stats.cost } }
+            })()
+          : CostCalculator.calculateCost(usage, model)
 
       modelStats.push({
         model,
@@ -6845,7 +6853,8 @@ router.get('/api-keys/:keyId/model-stats', authenticateAdmin, async (req, res) =
               allTokens: 0,
               // 媒体字段
               outputImages: 0,
-              outputDurationSeconds: 0
+              outputDurationSeconds: 0,
+              cost: 0
             })
           }
 
@@ -6859,6 +6868,7 @@ router.get('/api-keys/:keyId/model-stats', authenticateAdmin, async (req, res) =
           // 累加媒体字段
           stats.outputImages += parseInt(data.outputImages) || 0
           stats.outputDurationSeconds += parseFloat(data.outputDurationSeconds) || 0
+          stats.cost += parseFloat(data.cost) || 0
         }
       }
     }
@@ -6877,8 +6887,14 @@ router.get('/api-keys/:keyId/model-stats', authenticateAdmin, async (req, res) =
         output_duration_seconds: stats.outputDurationSeconds
       }
 
-      // 使用CostCalculator计算费用（包含媒体费用）
-      const costData = CostCalculator.calculateCost(usage, model)
+      // 使用存储的实际费用（含200K+溢价）；旧数据回退到重算
+      const costData =
+        stats.cost > 0
+          ? (() => {
+              const fallback = CostCalculator.calculateCost(usage, model)
+              return { ...fallback, costs: { ...fallback.costs, total: stats.cost } }
+            })()
+          : CostCalculator.calculateCost(usage, model)
 
       modelStats.push({
         model,

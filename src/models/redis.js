@@ -342,7 +342,8 @@ class RedisClient {
     model = 'unknown',
     ephemeral5mTokens = 0, // 新增：5分钟缓存 tokens
     ephemeral1hTokens = 0, // 新增：1小时缓存 tokens
-    isLongContextRequest = false // 新增：是否为 1M 上下文请求（超过200k）
+    isLongContextRequest = false, // 新增：是否为 1M 上下文请求（超过200k）
+    cost = 0 // 实际计算的费用（含200K+溢价），0表示未知
   ) {
     const key = `usage:${keyId}`
     const now = new Date()
@@ -483,6 +484,14 @@ class RedisClient {
     // 详细缓存类型统计
     pipeline.hincrby(keyModelMonthly, 'ephemeral5mTokens', ephemeral5mTokens)
     pipeline.hincrby(keyModelMonthly, 'ephemeral1hTokens', ephemeral1hTokens)
+
+    // 存储实际费用（含200K+溢价），用于模型分布费用准确性
+    if (cost > 0) {
+      pipeline.hincrbyfloat(modelDaily, 'cost', cost)
+      pipeline.hincrbyfloat(modelMonthly, 'cost', cost)
+      pipeline.hincrbyfloat(keyModelDaily, 'cost', cost)
+      pipeline.hincrbyfloat(keyModelMonthly, 'cost', cost)
+    }
 
     // 维护模型索引（用于快速查找，避免 SCAN）
     pipeline.sadd(keyModelsIndex, normalizedModel)

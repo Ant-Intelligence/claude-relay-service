@@ -1303,7 +1303,8 @@ class ApiKeyService {
         model,
         0, // ephemeral5mTokens - 暂时为0，后续处理
         0, // ephemeral1hTokens - 暂时为0，后续处理
-        isLongContextRequest
+        isLongContextRequest,
+        costInfo.costs?.total || 0 // 传递实际费用（含200K+溢价）
       )
 
       // 记录费用统计
@@ -1567,7 +1568,8 @@ class ApiKeyService {
         model,
         ephemeral5mTokens, // 传递5分钟缓存 tokens
         ephemeral1hTokens, // 传递1小时缓存 tokens
-        costInfo.isLongContextRequest || false // 传递 1M 上下文请求标记
+        costInfo.isLongContextRequest || false, // 传递 1M 上下文请求标记
+        costInfo.totalCost || 0 // 传递实际费用（含200K+溢价）
       )
 
       // 记录媒体使用统计（如果有媒体使用）
