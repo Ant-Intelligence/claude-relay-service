@@ -5,6 +5,7 @@ const redis = require('../models/redis')
 const logger = require('../utils/logger')
 const config = require('../../config/config')
 const LRUCache = require('../utils/lruCache')
+const { findMatchingModelEntry, resolveMappedModel } = require('../utils/modelMappingMatcher')
 
 class CcrAccountService {
   constructor() {
@@ -567,20 +568,7 @@ class CcrAccountService {
       return true
     }
 
-    // 检查请求的模型是否在映射表的键中（精确匹配）
-    if (Object.prototype.hasOwnProperty.call(modelMapping, requestedModel)) {
-      return true
-    }
-
-    // 尝试大小写不敏感匹配
-    const requestedModelLower = requestedModel.toLowerCase()
-    for (const key of Object.keys(modelMapping)) {
-      if (key.toLowerCase() === requestedModelLower) {
-        return true
-      }
-    }
-
-    return false
+    return !!findMatchingModelEntry(modelMapping, requestedModel)
   }
 
   // 🔄 获取映射后的模型名称
@@ -590,21 +578,7 @@ class CcrAccountService {
       return requestedModel
     }
 
-    // 精确匹配
-    if (modelMapping[requestedModel]) {
-      return modelMapping[requestedModel]
-    }
-
-    // 大小写不敏感匹配
-    const requestedModelLower = requestedModel.toLowerCase()
-    for (const [key, value] of Object.entries(modelMapping)) {
-      if (key.toLowerCase() === requestedModelLower) {
-        return value
-      }
-    }
-
-    // 如果不存在映射则返回原模型名
-    return requestedModel
+    return resolveMappedModel(modelMapping, requestedModel)
   }
 
   // 🔐 加密敏感数据

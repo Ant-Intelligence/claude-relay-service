@@ -1402,6 +1402,13 @@
                       + Haiku 4.5
                     </button>
                     <button
+                      class="rounded-lg bg-sky-100 px-3 py-1 text-xs text-sky-700 transition-colors hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50"
+                      type="button"
+                      @click="addPresetMapping('gpt-*', 'gpt-*')"
+                    >
+                      + GPT 前缀
+                    </button>
+                    <button
                       class="rounded-lg bg-cyan-100 px-3 py-1 text-xs text-cyan-700 transition-colors hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:hover:bg-cyan-900/50"
                       type="button"
                       @click="addPresetMapping('deepseek-chat', 'deepseek-chat')"
@@ -3174,6 +3181,13 @@
                     + Haiku 4.5
                   </button>
                   <button
+                    class="rounded-lg bg-sky-100 px-3 py-1 text-xs text-sky-700 transition-colors hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50"
+                    type="button"
+                    @click="addPresetMapping('gpt-*', 'gpt-*')"
+                  >
+                    + GPT 前缀
+                  </button>
+                  <button
                     class="rounded-lg bg-cyan-100 px-3 py-1 text-xs text-cyan-700 transition-colors hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:hover:bg-cyan-900/50"
                     type="button"
                     @click="addPresetMapping('deepseek-chat', 'deepseek-chat')"
@@ -4151,6 +4165,7 @@ const commonModels = [
   { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', color: 'blue' },
   { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', color: 'indigo' },
   { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', color: 'emerald' },
+  { value: 'gpt-*', label: 'GPT (gpt-*)', color: 'sky' },
   { value: 'deepseek-chat', label: 'DeepSeek Chat', color: 'cyan' },
   { value: 'Qwen', label: 'Qwen', color: 'orange' },
   { value: 'Kimi', label: 'Kimi', color: 'pink' },
