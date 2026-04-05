@@ -1159,7 +1159,7 @@ class RedisClient {
     return dataPoints.sort((a, b) => a.timestamp - b.timestamp)
   }
 
-  async addUsageRecord(keyId, record, maxRecords = 20000) {
+  async addUsageRecord(keyId, record, maxRecords = 2000) {
     const listKey = `usage:records:${keyId}`
     const client = this.getClientSafe()
 
@@ -1168,7 +1168,7 @@ class RedisClient {
         .multi()
         .lpush(listKey, JSON.stringify(record))
         .ltrim(listKey, 0, Math.max(0, maxRecords - 1))
-        .expire(listKey, 86400 * 90) // 默认保留90天
+        .expire(listKey, 86400 * 30) // 默认保留30天
         .exec()
     } catch (error) {
       logger.error(`❌ Failed to append usage record for key ${keyId}:`, error)
