@@ -1,7 +1,7 @@
 # Claude Relay Service Makefile
 # 功能完整的 AI API 中转服务，支持 Claude 和 Gemini 双平台
 
-.PHONY: help install setup dev start test lint clean docker-up docker-down service-start service-stop service-status logs cli-admin cli-keys cli-accounts cli-status ci-release-trigger
+.PHONY: help install setup dev start test lint clean docker-up docker-down service-start service-stop service-status logs cli-admin cli-keys cli-accounts cli-status ci-release-trigger update-price-file
 
 # 默认目标：显示帮助信息
 help:
@@ -285,6 +285,15 @@ put-compose:
 	scp docker-compose.yml cc2:/home/ubuntu/cc-club/compose.yml
 
 update: build-docker restart-claude-relay
+
+update-price-file:
+	@echo "💰 更新模型价格文件..."
+	@tmp=$$(mktemp) && \
+	curl --fail --show-error --location -o $$tmp \
+	  https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json && \
+	node -e "JSON.parse(require('fs').readFileSync('$$tmp','utf8'))" && \
+	mv $$tmp resources/model-pricing/model_prices_and_context_window.json && \
+	echo "✅ 更新完成"
 
 localstart:
 	npm run install:web
