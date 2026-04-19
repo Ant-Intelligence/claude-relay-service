@@ -1662,22 +1662,45 @@ class UnifiedClaudeScheduler {
   }
 
   // ⏱️ 标记账户为临时不可用（轻量级熔断，TTL自动恢复）
+  // TTL 优先级：调用方显式传入 > 按 statusCode 匹配的环境变量 > 默认 300s
   async markAccountTemporarilyUnavailable(
     accountId,
     accountType,
     _sessionHash = null,
-    ttlSeconds = 300
+    ttlSeconds = null,
+    statusCode = null
   ) {
     try {
       const client = redis.getClientSafe()
       const key = `temp_unavailable:${accountId}`
-      await client.set(key, Date.now().toString(), 'EX', ttlSeconds)
+
+      // 按错误类型推断 TTL
+      const parseEnvPositiveInt = (name, fallback) => {
+        const v = parseInt(process.env[name], 10)
+        return Number.isFinite(v) && v > 0 ? v : fallback
+      }
+      let effectiveTtl = ttlSeconds
+      if (!Number.isFinite(effectiveTtl) || effectiveTtl <= 0) {
+        if (statusCode === 503) {
+          effectiveTtl = parseEnvPositiveInt('UPSTREAM_ERROR_503_TTL_SECONDS', 60)
+        } else if (statusCode === 529) {
+          effectiveTtl = parseEnvPositiveInt('UPSTREAM_ERROR_OVERLOAD_TTL_SECONDS', 600)
+        } else if (statusCode === 401 || statusCode === 403) {
+          effectiveTtl = parseEnvPositiveInt('UPSTREAM_ERROR_AUTH_TTL_SECONDS', 1800)
+        } else if (statusCode === 504) {
+          effectiveTtl = parseEnvPositiveInt('UPSTREAM_ERROR_TIMEOUT_TTL_SECONDS', 300)
+        } else {
+          effectiveTtl = parseEnvPositiveInt('UPSTREAM_ERROR_5XX_TTL_SECONDS', 300)
+        }
+      }
+
+      await client.set(key, Date.now().toString(), 'EX', effectiveTtl)
 
       logger.warn(
-        `⏱️ Account ${accountId} (${accountType}) marked temporarily unavailable for ${ttlSeconds}s`
+        `⏱️ Account ${accountId} (${accountType}) marked temporarily unavailable for ${effectiveTtl}s (status=${statusCode || 'n/a'})`
       )
 
-      return { success: true }
+      return { success: true, ttlSeconds: effectiveTtl }
     } catch (error) {
       logger.error(
         `❌ Failed to mark account temporarily unavailable: ${accountId} (${accountType})`,

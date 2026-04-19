@@ -18,9 +18,8 @@ class BedrockRelayService {
     this.defaultSmallModel =
       process.env.ANTHROPIC_SMALL_FAST_MODEL || 'us.anthropic.claude-3-5-haiku-20241022-v1:0'
 
-    // Token配置
-    this.maxOutputTokens = parseInt(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) || 4096
-    this.maxThinkingTokens = parseInt(process.env.MAX_THINKING_TOKENS) || 1024
+    // Token配置 — 仅作为客户端未指定 max_tokens 时的回退默认值，不用于截断
+    this.maxOutputTokens = parseInt(process.env.BEDROCK_MAX_OUTPUT_TOKENS) || 128000
     this.enablePromptCaching = process.env.DISABLE_PROMPT_CACHING !== '1'
 
     // 创建Bedrock客户端
@@ -37,7 +36,11 @@ class BedrockRelayService {
     }
 
     const clientConfig = {
-      region: targetRegion
+      region: targetRegion,
+      requestHandler: {
+        requestTimeout: config.requestTimeout || 600000,
+        connectionTimeout: 10000
+      }
     }
 
     // 如果账户配置了特定的AWS凭证，使用它们
@@ -47,6 +50,15 @@ class BedrockRelayService {
         secretAccessKey: bedrockAccount.awsCredentials.secretAccessKey,
         sessionToken: bedrockAccount.awsCredentials.sessionToken
       }
+    } else if (bedrockAccount?.bearerToken) {
+      // Bedrock API Key (ABSK) 模式：需要通过 middleware 注入 Bearer Token，
+      // 因为 BedrockRuntimeClient 默认使用 SigV4 签名，不支持 token 配置
+      // 使用占位凭证防止 "Could not load credentials" 错误
+      clientConfig.credentials = {
+        accessKeyId: 'BEDROCK_API_KEY_PLACEHOLDER',
+        secretAccessKey: 'BEDROCK_API_KEY_PLACEHOLDER'
+      }
+      logger.debug(`🔑 使用 Bearer Token 认证 - 账户: ${bedrockAccount.name || 'unknown'}`)
     } else {
       // 检查是否有环境变量凭证
       if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
@@ -59,6 +71,28 @@ class BedrockRelayService {
     }
 
     const client = new BedrockRuntimeClient(clientConfig)
+
+    // Bedrock API Key (ABSK) 模式：在 finalizeRequest 阶段替换 Authorization header
+    if (bedrockAccount?.bearerToken) {
+      const { bearerToken } = bedrockAccount
+      client.middlewareStack.add(
+        (next) => async (args) => {
+          for (const key of Object.keys(args.request.headers)) {
+            if (key.toLowerCase() === 'authorization') {
+              delete args.request.headers[key]
+            }
+          }
+          args.request.headers['Authorization'] = `Bearer ${bearerToken}`
+          delete args.request.headers['x-amz-date']
+          delete args.request.headers['x-amz-security-token']
+          delete args.request.headers['x-amz-content-sha256']
+          return next(args)
+        },
+        { step: 'finalizeRequest', name: 'bedrockBearerTokenAuth', override: true, priority: 'low' }
+      )
+      logger.debug(`🔑 Bearer Token middleware 已注入 - 账户: ${bedrockAccount.name || 'unknown'}`)
+    }
+
     this.clients.set(clientKey, client)
 
     logger.debug(
@@ -181,16 +215,25 @@ class BedrockRelayService {
     } catch (error) {
       logger.error('❌ Bedrock流式请求失败:', error)
 
-      // 发送错误事件
-      if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'application/json' })
+      const bedrockError = this._handleBedrockError(error)
+
+      try {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'text/event-stream' })
+        }
+        if (!res.writableEnded) {
+          res.write('event: error\n')
+          res.write(`data: ${JSON.stringify({ error: bedrockError.message })}\n\n`)
+          res.end()
+        }
+      } catch (writeError) {
+        logger.error('❌ Failed to write error response:', writeError.message)
+        if (!res.writableEnded) {
+          res.end()
+        }
       }
 
-      res.write('event: error\n')
-      res.write(`data: ${JSON.stringify({ error: this._handleBedrockError(error).message })}\n\n`)
-      res.end()
-
-      throw this._handleBedrockError(error)
+      throw bedrockError
     }
   }
 
@@ -225,6 +268,23 @@ class BedrockRelayService {
     }
 
     return bedrockModel
+  }
+
+  // 将Bedrock模型名反向映射为标准Claude格式
+  // 客户端（如 Claude Code）依赖标准模型名来判定上下文窗口大小，
+  // 若收到 Bedrock 格式名称则可能使用保守默认值，导致过早触发 "Context limit reached"。
+  _mapFromBedrockModel(bedrockModelId) {
+    if (!bedrockModelId) {
+      return bedrockModelId
+    }
+    if (!bedrockModelId.includes('.anthropic.') && !bedrockModelId.startsWith('anthropic.')) {
+      return bedrockModelId
+    }
+    const match = bedrockModelId.match(/(?:.*\.)?anthropic\.(claude-.+?)(?:-v\d+)?(?::\d+)?$/)
+    if (match) {
+      return match[1]
+    }
+    return bedrockModelId
   }
 
   // 将标准Claude模型名映射为Bedrock格式
@@ -297,9 +357,12 @@ class BedrockRelayService {
 
   // 转换Claude格式请求到Bedrock格式
   _convertToBedrockFormat(requestBody) {
+    // 透传客户端的 max_tokens，仅在未指定时使用默认值作为回退
+    const maxTokens = requestBody.max_tokens || this.maxOutputTokens
+
     const bedrockPayload = {
       anthropic_version: 'bedrock-2023-05-31',
-      max_tokens: Math.min(requestBody.max_tokens || this.maxOutputTokens, this.maxOutputTokens),
+      max_tokens: maxTokens,
       messages: requestBody.messages || []
     }
 
@@ -334,6 +397,24 @@ class BedrockRelayService {
       bedrockPayload.tool_choice = requestBody.tool_choice
     }
 
+    // Extended thinking 支持
+    // Bedrock 只支持 "enabled" / "disabled"，不支持 "adaptive"
+    // adaptive 模式不要求 budget_tokens，但 Bedrock enabled 必须有
+    if (requestBody.thinking) {
+      bedrockPayload.thinking = { ...requestBody.thinking }
+      if (bedrockPayload.thinking.type === 'adaptive') {
+        bedrockPayload.thinking.type = 'enabled'
+        if (!bedrockPayload.thinking.budget_tokens) {
+          bedrockPayload.thinking.budget_tokens = maxTokens - 1
+        }
+      }
+    }
+
+    // metadata 透传
+    if (requestBody.metadata) {
+      bedrockPayload.metadata = requestBody.metadata
+    }
+
     return bedrockPayload
   }
 
@@ -344,7 +425,7 @@ class BedrockRelayService {
       type: 'message',
       role: 'assistant',
       content: bedrockResponse.content || [],
-      model: bedrockResponse.model || this.defaultModel,
+      model: this._mapFromBedrockModel(bedrockResponse.model) || this.defaultModel,
       stop_reason: bedrockResponse.stop_reason || 'end_turn',
       stop_sequence: bedrockResponse.stop_sequence || null,
       usage: bedrockResponse.usage || {
@@ -357,6 +438,7 @@ class BedrockRelayService {
   // 转换Bedrock流事件到Claude SSE格式
   _convertBedrockStreamToClaudeFormat(bedrockChunk) {
     if (bedrockChunk.type === 'message_start') {
+      const upstreamModel = bedrockChunk.message?.model
       return {
         type: 'message_start',
         data: {
@@ -364,7 +446,7 @@ class BedrockRelayService {
           id: `msg_${Date.now()}_bedrock`,
           role: 'assistant',
           content: [],
-          model: this.defaultModel,
+          model: this._mapFromBedrockModel(upstreamModel) || this.defaultModel,
           stop_reason: null,
           stop_sequence: null,
           usage: bedrockChunk.message?.usage || { input_tokens: 0, output_tokens: 0 }

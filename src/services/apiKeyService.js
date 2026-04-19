@@ -1268,7 +1268,8 @@ class ApiKeyService {
     cacheReadTokens = 0,
     model = 'unknown',
     accountId = null,
-    useBooster = false // 新增：是否使用加油包
+    useBooster = false, // 是否使用加油包
+    serviceTier = null // OpenAI Responses: 'priority' 等 service_tier 值
   ) {
     try {
       const totalTokens = inputTokens + outputTokens + cacheCreateTokens + cacheReadTokens
@@ -1282,7 +1283,8 @@ class ApiKeyService {
           cache_creation_input_tokens: cacheCreateTokens,
           cache_read_input_tokens: cacheReadTokens
         },
-        model
+        model,
+        serviceTier
       )
 
       // 检查是否为 1M 上下文请求

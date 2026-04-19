@@ -145,8 +145,10 @@ class ModelService {
         models: [
           // GPT-5.4 系列（最新）
           'gpt-5.4',
+          'gpt-5.4-pro',
           // GPT-5.3 系列
           'gpt-5.3-codex',
+          'gpt-5.3-codex-spark',
           // GPT-5.2 系列
           'gpt-5.2-2025-12-11',
           'gpt-5.2-codex',

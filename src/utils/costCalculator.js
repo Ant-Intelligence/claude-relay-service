@@ -1,4 +1,7 @@
 const pricingService = require('../services/pricingService')
+const logger = require('./logger')
+
+const warnedDetailedPricingFallbackModels = new Set()
 
 // Claude模型价格配置 (USD per 1M tokens) - 备用定价
 const MODEL_PRICING = {
@@ -104,7 +107,7 @@ class CostCalculator {
    * @param {string} model - 模型名称
    * @returns {Object} 费用详情
    */
-  static calculateCost(usage, model = 'unknown') {
+  static calculateCost(usage, model = 'unknown', serviceTier = null) {
     // 如果 usage 包含详细的 cache_creation 对象或是 1M 模型或是媒体模型，使用 pricingService 来处理
     // Also use pricingService for media billing fields
     // 使用 !== undefined 检查，避免当值为 0 时被错误地判断为 false
@@ -119,80 +122,103 @@ class CostCalculator {
       hasMediaFields
     ) {
       const result = pricingService.calculateCost(usage, model)
-      // 转换 pricingService 返回的格式到 costCalculator 的格式
-      return {
-        model,
-        pricing: {
-          input: result.pricing.input * 1000000, // 转换为 per 1M tokens
-          output: result.pricing.output * 1000000,
-          cacheWrite: result.pricing.cacheCreate * 1000000,
-          cacheRead: result.pricing.cacheRead * 1000000,
-          // Media pricing rates (already in USD, no conversion needed)
-          inputPerImage: result.pricing.inputPerImage || 0,
-          outputPerImage: result.pricing.outputPerImage || 0,
-          outputPerImageToken: (result.pricing.outputPerImageToken || 0) * 1000000,
-          inputPerPixel: result.pricing.inputPerPixel || 0,
-          outputPerPixel: result.pricing.outputPerPixel || 0,
-          outputPerSecond: result.pricing.outputPerSecond || 0
-        },
-        usingDynamicPricing: true,
-        isLongContextRequest: result.isLongContextRequest || false,
-        // Media model flags
-        isImageModel: result.isImageModel || false,
-        isVideoModel: result.isVideoModel || false,
-        isMediaModel: result.isMediaModel || false,
-        usage: {
-          inputTokens: usage.input_tokens || 0,
-          outputTokens: usage.output_tokens || 0,
-          cacheCreateTokens: usage.cache_creation_input_tokens || 0,
-          cacheReadTokens: usage.cache_read_input_tokens || 0,
-          totalTokens:
-            (usage.input_tokens || 0) +
-            (usage.output_tokens || 0) +
-            (usage.cache_creation_input_tokens || 0) +
-            (usage.cache_read_input_tokens || 0),
-          // Media usage fields
-          inputImages: usage.input_images || 0,
-          outputImages: usage.output_images || 0,
-          outputDurationSeconds: usage.output_duration_seconds || 0
-        },
-        costs: {
-          input: result.inputCost,
-          output: result.outputCost,
-          cacheWrite: result.cacheCreateCost,
-          cacheRead: result.cacheReadCost,
-          // Media costs
-          imageInput: result.imageInputCost || 0,
-          imageOutput: result.imageOutputCost || 0,
-          imageTotal: result.imageTotalCost || 0,
-          videoOutput: result.videoOutputCost || 0,
-          mediaTotal: result.mediaTotalCost || 0,
-          total: result.totalCost
-        },
-        formatted: {
-          input: this.formatCost(result.inputCost),
-          output: this.formatCost(result.outputCost),
-          cacheWrite: this.formatCost(result.cacheCreateCost),
-          cacheRead: this.formatCost(result.cacheReadCost),
-          // Media cost formatting
-          imageInput: this.formatCost(result.imageInputCost || 0),
-          imageOutput: this.formatCost(result.imageOutputCost || 0),
-          imageTotal: this.formatCost(result.imageTotalCost || 0),
-          videoOutput: this.formatCost(result.videoOutputCost || 0),
-          mediaTotal: this.formatCost(result.mediaTotalCost || 0),
-          total: this.formatCost(result.totalCost)
-        },
-        debug: {
-          isOpenAIModel: model.includes('gpt') || model.includes('o1'),
-          hasCacheCreatePrice: !!result.pricing.cacheCreate,
-          cacheCreateTokens: usage.cache_creation_input_tokens || 0,
-          cacheWritePriceUsed: result.pricing.cacheCreate * 1000000,
-          isLongContextModel: model && model.includes('[1m]'),
+      // 防御性处理：当 pricingService 未返回完整定价时，跌落到静态定价回退，避免统计崩溃
+      const isFinite = (v) => typeof v === 'number' && Number.isFinite(v)
+      const validResult =
+        result &&
+        result.hasPricing === true &&
+        result.pricing &&
+        isFinite(result.pricing.input) &&
+        isFinite(result.pricing.output) &&
+        isFinite(result.pricing.cacheCreate) &&
+        isFinite(result.pricing.cacheRead) &&
+        isFinite(result.totalCost)
+      if (!validResult) {
+        const warnKey = typeof model === 'string' && model ? model : 'unknown'
+        if (!warnedDetailedPricingFallbackModels.has(warnKey)) {
+          warnedDetailedPricingFallbackModels.add(warnKey)
+          logger.warn(
+            `💰 Missing detailed pricing for model ${warnKey}; using fallback static pricing ` +
+              `(hasPricing=${result?.hasPricing === true}, hasMedia=${hasMediaFields}, longContext=${!!(model && model.includes('[1m]'))})`
+          )
+        }
+        // 跳过详细定价分支，走下方的静态定价逻辑
+      } else {
+        // 转换 pricingService 返回的格式到 costCalculator 的格式
+        return {
+          model,
+          pricing: {
+            input: result.pricing.input * 1000000, // 转换为 per 1M tokens
+            output: result.pricing.output * 1000000,
+            cacheWrite: result.pricing.cacheCreate * 1000000,
+            cacheRead: result.pricing.cacheRead * 1000000,
+            // Media pricing rates (already in USD, no conversion needed)
+            inputPerImage: result.pricing.inputPerImage || 0,
+            outputPerImage: result.pricing.outputPerImage || 0,
+            outputPerImageToken: (result.pricing.outputPerImageToken || 0) * 1000000,
+            inputPerPixel: result.pricing.inputPerPixel || 0,
+            outputPerPixel: result.pricing.outputPerPixel || 0,
+            outputPerSecond: result.pricing.outputPerSecond || 0
+          },
+          usingDynamicPricing: true,
           isLongContextRequest: result.isLongContextRequest || false,
-          // Media debug info
+          // Media model flags
           isImageModel: result.isImageModel || false,
           isVideoModel: result.isVideoModel || false,
-          hasMediaCost: (result.mediaTotalCost || 0) > 0
+          isMediaModel: result.isMediaModel || false,
+          usage: {
+            inputTokens: usage.input_tokens || 0,
+            outputTokens: usage.output_tokens || 0,
+            cacheCreateTokens: usage.cache_creation_input_tokens || 0,
+            cacheReadTokens: usage.cache_read_input_tokens || 0,
+            totalTokens:
+              (usage.input_tokens || 0) +
+              (usage.output_tokens || 0) +
+              (usage.cache_creation_input_tokens || 0) +
+              (usage.cache_read_input_tokens || 0),
+            // Media usage fields
+            inputImages: usage.input_images || 0,
+            outputImages: usage.output_images || 0,
+            outputDurationSeconds: usage.output_duration_seconds || 0
+          },
+          costs: {
+            input: result.inputCost,
+            output: result.outputCost,
+            cacheWrite: result.cacheCreateCost,
+            cacheRead: result.cacheReadCost,
+            // Media costs
+            imageInput: result.imageInputCost || 0,
+            imageOutput: result.imageOutputCost || 0,
+            imageTotal: result.imageTotalCost || 0,
+            videoOutput: result.videoOutputCost || 0,
+            mediaTotal: result.mediaTotalCost || 0,
+            total: result.totalCost
+          },
+          formatted: {
+            input: this.formatCost(result.inputCost),
+            output: this.formatCost(result.outputCost),
+            cacheWrite: this.formatCost(result.cacheCreateCost),
+            cacheRead: this.formatCost(result.cacheReadCost),
+            // Media cost formatting
+            imageInput: this.formatCost(result.imageInputCost || 0),
+            imageOutput: this.formatCost(result.imageOutputCost || 0),
+            imageTotal: this.formatCost(result.imageTotalCost || 0),
+            videoOutput: this.formatCost(result.videoOutputCost || 0),
+            mediaTotal: this.formatCost(result.mediaTotalCost || 0),
+            total: this.formatCost(result.totalCost)
+          },
+          debug: {
+            isOpenAIModel: model.includes('gpt') || model.includes('o1'),
+            hasCacheCreatePrice: !!result.pricing.cacheCreate,
+            cacheCreateTokens: usage.cache_creation_input_tokens || 0,
+            cacheWritePriceUsed: result.pricing.cacheCreate * 1000000,
+            isLongContextModel: model && model.includes('[1m]'),
+            isLongContextRequest: result.isLongContextRequest || false,
+            // Media debug info
+            isImageModel: result.isImageModel || false,
+            isVideoModel: result.isVideoModel || false,
+            hasMediaCost: (result.mediaTotalCost || 0) > 0
+          }
         }
       }
     }
@@ -209,10 +235,22 @@ class CostCalculator {
     let usingDynamicPricing = false
 
     if (pricingData) {
-      // 转换动态价格格式为内部格式
-      const inputPrice = (pricingData.input_cost_per_token || 0) * 1000000 // 转换为per 1M tokens
-      const outputPrice = (pricingData.output_cost_per_token || 0) * 1000000
-      const cacheReadPrice = (pricingData.cache_read_input_token_cost || 0) * 1000000
+      // 检查是否使用 priority service_tier 定价（OpenAI Responses 独有）
+      const usePriority = serviceTier === 'priority' && pricingData.supports_service_tier
+
+      // 转换动态价格格式为内部格式（priority 定价时优先使用 *_priority 字段，缺失回退到标准价格）
+      const inputPrice =
+        ((usePriority && pricingData.input_cost_per_token_priority) ||
+          pricingData.input_cost_per_token ||
+          0) * 1000000
+      const outputPrice =
+        ((usePriority && pricingData.output_cost_per_token_priority) ||
+          pricingData.output_cost_per_token ||
+          0) * 1000000
+      const cacheReadPrice =
+        ((usePriority && pricingData.cache_read_input_token_cost_priority) ||
+          pricingData.cache_read_input_token_cost ||
+          0) * 1000000
 
       // OpenAI 模型的特殊处理：
       // - 如果没有 cache_creation_input_token_cost，缓存创建按普通 input 价格计费

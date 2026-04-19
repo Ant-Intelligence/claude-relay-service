@@ -531,6 +531,7 @@ class OpenAIResponsesRelayService {
             usageData.total_tokens || totalInputTokens + outputTokens + cacheCreateTokens
           const modelToRecord = actualModel || requestedModel || 'gpt-4'
 
+          const serviceTier = req._serviceTier || null
           await apiKeyService.recordUsage(
             apiKeyData.id,
             actualInputTokens, // 传递实际输入（不含缓存）
@@ -539,7 +540,8 @@ class OpenAIResponsesRelayService {
             cacheReadTokens,
             modelToRecord,
             account.id,
-            req.useBooster || false // 传递是否使用加油包
+            req.useBooster || false, // 传递是否使用加油包
+            serviceTier
           )
 
           logger.info(
@@ -560,7 +562,8 @@ class OpenAIResponsesRelayService {
                 cache_creation_input_tokens: cacheCreateTokens,
                 cache_read_input_tokens: cacheReadTokens
               },
-              modelToRecord
+              modelToRecord,
+              serviceTier
             )
             await openaiResponsesAccountService.updateUsageQuota(account.id, costInfo.costs.total)
           }
@@ -660,6 +663,7 @@ class OpenAIResponsesRelayService {
         const totalTokens =
           usageData.total_tokens || totalInputTokens + outputTokens + cacheCreateTokens
 
+        const serviceTier = req._serviceTier || null
         await apiKeyService.recordUsage(
           apiKeyData.id,
           actualInputTokens, // 传递实际输入（不含缓存）
@@ -668,7 +672,8 @@ class OpenAIResponsesRelayService {
           cacheReadTokens,
           actualModel,
           account.id,
-          req.useBooster || false // 传递是否使用加油包
+          req.useBooster || false, // 传递是否使用加油包
+          serviceTier
         )
 
         logger.info(
@@ -689,7 +694,8 @@ class OpenAIResponsesRelayService {
               cache_creation_input_tokens: cacheCreateTokens,
               cache_read_input_tokens: cacheReadTokens
             },
-            actualModel
+            actualModel,
+            serviceTier
           )
           await openaiResponsesAccountService.updateUsageQuota(account.id, costInfo.costs.total)
         }

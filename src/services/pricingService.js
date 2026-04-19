@@ -690,8 +690,16 @@ class PricingService {
     const totalInputTokens = inputTokens + cacheCreationTokens + cacheReadTokens
 
     // 200K+ 定价触发条件：[1m] 后缀 或 context-1m beta，且总输入超过 200k
+    // Anthropic 官方定价：所有 Claude 模型在 1M 上下文内采用统一价格，无 200K+ 溢价
+    // https://platform.claude.com/docs/en/about-claude/pricing
+    const ignores200kLongContextPricing =
+      (typeof baseModelName === 'string' && baseModelName.toLowerCase().includes('claude')) ||
+      (typeof pricing?.litellm_provider === 'string' &&
+        pricing.litellm_provider.toLowerCase().includes('anthropic'))
     const isLongContextRequest =
-      (isLongContextModel || hasContext1mBeta) && totalInputTokens > 200000
+      (isLongContextModel || hasContext1mBeta) &&
+      totalInputTokens > 200000 &&
+      !ignores200kLongContextPricing
 
     // ========== Input/Output Cost ==========
     let inputPrice = pricing.input_cost_per_token || 0

@@ -264,6 +264,9 @@ const handleResponses = async (req, res) => {
     const codexCliPattern = /^(codex_vscode|codex_cli_rs)\/[\d.]+/i
     const isCodexCLI = codexCliPattern.test(userAgent)
 
+    // 在字段被移除前提取 service_tier，用于后续费用计算
+    req._serviceTier = req.body?.service_tier || null
+
     // 如果不是 Codex CLI 请求，则进行适配
     if (!isCodexCLI) {
       // 移除不需要的请求体字段
@@ -613,7 +616,8 @@ const handleResponses = async (req, res) => {
             cacheReadTokens,
             actualModel,
             accountId,
-            apiKeyData.useBooster || false // 传递是否使用加油包
+            apiKeyData.useBooster || false, // 传递是否使用加油包
+            req._serviceTier
           )
 
           logger.info(
@@ -747,7 +751,8 @@ const handleResponses = async (req, res) => {
             cacheReadTokens,
             modelToRecord,
             accountId,
-            apiKeyData.useBooster || false // 传递是否使用加油包
+            apiKeyData.useBooster || false, // 传递是否使用加油包
+            req._serviceTier
           )
 
           logger.info(

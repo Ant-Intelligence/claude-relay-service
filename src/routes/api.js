@@ -446,6 +446,9 @@ async function handleMessagesRequest(req, res) {
           if (!res.headersSent) {
             return res.status(500).json({ error: 'Bedrock service error', message: error.message })
           }
+          if (!res.writableEnded) {
+            res.end()
+          }
           return undefined
         }
       } else if (accountType === 'ccr') {
