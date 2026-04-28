@@ -36,6 +36,18 @@
             <i class="fas fa-bell mr-2"></i>
             通知设置
           </button>
+          <button
+            :class="[
+              'border-b-2 pb-2 text-sm font-medium transition-colors',
+              activeSection === 'serviceRates'
+                ? 'border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            ]"
+            @click="activeSection = 'serviceRates'"
+          >
+            <i class="fas fa-balance-scale mr-2"></i>
+            服务倍率
+          </button>
         </nav>
       </div>
 
@@ -627,6 +639,108 @@
               <i class="fas fa-paper-plane mr-2"></i>
               发送测试通知
             </button>
+          </div>
+        </div>
+
+        <!-- 服务倍率设置部分 -->
+        <div v-show="activeSection === 'serviceRates'">
+          <!-- 说明卡片 -->
+          <div
+            class="mb-6 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 p-4 shadow-sm dark:from-blue-900/30 dark:to-indigo-900/30 sm:p-6"
+          >
+            <h2 class="mb-2 text-lg font-semibold text-gray-800 dark:text-gray-100">
+              <i class="fas fa-info-circle mr-2 text-blue-500"></i>
+              什么是服务倍率？
+            </h2>
+            <p class="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+              管理员可以为每个上游服务（Claude / Codex / Gemini / Droid / Bedrock / Azure /
+              CCR）配置不同的扣费倍率。倍率会与 API Key 的实际上游费用相乘后从配额中扣除。例如
+              Gemini 倍率设置为
+              <strong>0.5</strong> 时，消耗 <strong>$1</strong> 上游费用只会从配额扣除
+              <strong>$0.5</strong>。基准服务为
+              <strong>{{ getServiceName(serviceRates.baseService || 'claude') }}</strong
+              >，始终保持 1.0。
+            </p>
+          </div>
+
+          <!-- 服务倍率配置面板 -->
+          <div
+            class="rounded-lg bg-white/80 p-4 shadow-lg backdrop-blur-sm dark:bg-gray-800/80 sm:p-6"
+          >
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">倍率配置</h2>
+              <span v-if="serviceRates.updatedAt" class="text-xs text-gray-500 dark:text-gray-400">
+                最后更新: {{ formatTimestamp(serviceRates.updatedAt) }}
+                <span v-if="serviceRates.updatedBy"> 由 {{ serviceRates.updatedBy }} 修改</span>
+              </span>
+            </div>
+
+            <div v-if="serviceRatesLoading" class="py-12 text-center">
+              <div class="loading-spinner mx-auto mb-4"></div>
+              <p class="text-gray-500 dark:text-gray-400">正在加载倍率配置...</p>
+            </div>
+
+            <div v-else>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div
+                  v-for="service in supportedServices"
+                  :key="service"
+                  class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-700 dark:bg-gray-700"
+                >
+                  <div class="mb-3 flex items-center justify-between">
+                    <div class="flex items-center">
+                      <div
+                        class="mr-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br text-white"
+                        :class="getServiceIconClass(service)"
+                      >
+                        <i :class="['fas', getServiceIcon(service), 'text-sm']"></i>
+                      </div>
+                      <div>
+                        <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {{ getServiceName(service) }}
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">{{ service }}</div>
+                      </div>
+                    </div>
+                    <span
+                      v-if="serviceRates.baseService === service"
+                      class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                    >
+                      基准服务
+                    </span>
+                  </div>
+                  <div class="flex items-center">
+                    <input
+                      v-model.number="serviceRates.rates[service]"
+                      class="form-input w-full dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                      max="10"
+                      min="0.1"
+                      step="0.1"
+                      type="number"
+                    />
+                    <span class="ml-2 text-sm text-gray-500 dark:text-gray-400">倍</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-6 flex justify-end">
+                <button
+                  class="group flex items-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-lg disabled:cursor-not-allowed disabled:from-gray-400 disabled:to-gray-500"
+                  :disabled="serviceRatesSaving"
+                  @click="saveServiceRates"
+                >
+                  <i
+                    class="mr-2 transition-transform"
+                    :class="
+                      serviceRatesSaving
+                        ? 'fas fa-spinner fa-spin'
+                        : 'fas fa-save group-hover:scale-110'
+                    "
+                  ></i>
+                  {{ serviceRatesSaving ? '保存中...' : '保存倍率' }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1309,11 +1423,124 @@ const platformForm = ref({
   ignoreTLS: false
 })
 
+// 服务倍率（Service Multiplier）配置
+const SUPPORTED_SERVICES = ['claude', 'codex', 'gemini', 'droid', 'bedrock', 'azure', 'ccr']
+const SERVICE_DISPLAY = {
+  claude: { name: 'Claude', icon: 'fa-robot', gradient: 'from-orange-400 to-orange-600' },
+  codex: { name: 'Codex (OpenAI)', icon: 'fa-brain', gradient: 'from-emerald-400 to-emerald-600' },
+  gemini: { name: 'Gemini', icon: 'fa-gem', gradient: 'from-blue-400 to-blue-600' },
+  droid: { name: 'Droid', icon: 'fa-android', gradient: 'from-purple-400 to-purple-600' },
+  bedrock: { name: 'AWS Bedrock', icon: 'fa-aws', gradient: 'from-amber-400 to-amber-600' },
+  azure: { name: 'Azure OpenAI', icon: 'fa-microsoft', gradient: 'from-cyan-400 to-cyan-600' },
+  ccr: { name: 'CCR', icon: 'fa-server', gradient: 'from-slate-400 to-slate-600' }
+}
+const supportedServices = ref(SUPPORTED_SERVICES)
+const serviceRates = ref({
+  rates: SUPPORTED_SERVICES.reduce((acc, s) => {
+    acc[s] = 1.0
+    return acc
+  }, {}),
+  baseService: 'claude',
+  updatedAt: null,
+  updatedBy: null
+})
+const serviceRatesLoading = ref(false)
+const serviceRatesSaving = ref(false)
+const serviceRatesLoaded = ref(false)
+
+const getServiceName = (id) => SERVICE_DISPLAY[id]?.name || id
+const getServiceIcon = (id) => SERVICE_DISPLAY[id]?.icon || 'fa-question'
+const getServiceIconClass = (id) => SERVICE_DISPLAY[id]?.gradient || 'from-gray-400 to-gray-600'
+const formatTimestamp = (iso) => {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString()
+  } catch (e) {
+    return iso
+  }
+}
+
+async function loadServiceRates() {
+  if (serviceRatesLoading.value) return
+  serviceRatesLoading.value = true
+  try {
+    const response = await apiClient.get('/admin/service-rates', {
+      signal: abortController.value.signal
+    })
+    if (response?.success && response.data) {
+      const data = response.data
+      // Merge with defaults so any missing service still shows 1.0
+      const mergedRates = SUPPORTED_SERVICES.reduce((acc, s) => {
+        acc[s] = typeof data.rates?.[s] === 'number' ? data.rates[s] : 1.0
+        return acc
+      }, {})
+      serviceRates.value = {
+        rates: mergedRates,
+        baseService: data.baseService || 'claude',
+        updatedAt: data.updatedAt || null,
+        updatedBy: data.updatedBy || null
+      }
+      serviceRatesLoaded.value = true
+    } else if (response?.error) {
+      showToast(response.error, 'error')
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError') return
+    logger.error('Failed to load service rates:', error)
+    showToast('加载服务倍率失败: ' + (error?.message || '未知错误'), 'error')
+  } finally {
+    serviceRatesLoading.value = false
+  }
+}
+
+async function saveServiceRates() {
+  if (serviceRatesSaving.value) return
+  // Frontend validation
+  for (const service of SUPPORTED_SERVICES) {
+    const v = Number(serviceRates.value.rates[service])
+    if (!Number.isFinite(v) || v <= 0 || v < 0.1 || v > 10) {
+      showToast(`${getServiceName(service)} 倍率必须是 0.1 到 10 之间的正数`, 'error')
+      return
+    }
+  }
+  serviceRatesSaving.value = true
+  try {
+    const response = await apiClient.put('/admin/service-rates', {
+      rates: serviceRates.value.rates,
+      baseService: serviceRates.value.baseService
+    })
+    if (response?.success && response.data) {
+      const data = response.data
+      const mergedRates = SUPPORTED_SERVICES.reduce((acc, s) => {
+        acc[s] = typeof data.rates?.[s] === 'number' ? data.rates[s] : 1.0
+        return acc
+      }, {})
+      serviceRates.value = {
+        rates: mergedRates,
+        baseService: data.baseService || 'claude',
+        updatedAt: data.updatedAt || null,
+        updatedBy: data.updatedBy || null
+      }
+      showToast('服务倍率保存成功', 'success')
+    } else {
+      showToast(response?.error || '保存失败', 'error')
+    }
+  } catch (error) {
+    logger.error('Failed to save service rates:', error)
+    showToast('保存服务倍率失败: ' + (error?.message || '未知错误'), 'error')
+  } finally {
+    serviceRatesSaving.value = false
+  }
+}
+
 // 监听activeSection变化，加载对应配置
 const sectionWatcher = watch(activeSection, async (newSection) => {
   if (!isMounted.value) return
   if (newSection === 'webhook') {
     await loadWebhookConfig()
+  }
+  if (newSection === 'serviceRates' && !serviceRatesLoaded.value) {
+    await loadServiceRates()
   }
 })
 
