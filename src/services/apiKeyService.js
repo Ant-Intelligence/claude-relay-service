@@ -153,7 +153,8 @@ class ApiKeyService {
       activationDays = 0, // 新增：激活后有效天数（0表示不使用此功能）
       activationUnit = 'days', // 新增：激活时间单位 'hours' 或 'days'
       expirationMode = 'fixed', // 新增：过期模式 'fixed'(固定时间) 或 'activation'(首次使用后激活)
-      icon = '' // 新增：图标（base64编码）
+      icon = '', // 新增：图标（base64编码）
+      serviceRates = null // 新增：API Key 级别的服务倍率覆盖 { service: number }
     } = options
 
     // 生成简单的API Key (64字符十六进制)
@@ -201,7 +202,10 @@ class ApiKeyService {
       createdBy: options.createdBy || 'admin',
       userId: options.userId || '',
       userUsername: options.userUsername || '',
-      icon: icon || '' // 新增：图标（base64编码）
+      icon: icon || '', // 新增：图标（base64编码）
+      serviceRates: serviceRates
+        ? JSON.stringify(require('./serviceRatesService').parseKeyOverrides(serviceRates))
+        : ''
     }
 
     // 保存API Key数据并建立哈希映射
@@ -245,7 +249,10 @@ class ApiKeyService {
       activatedAt: keyData.activatedAt,
       createdAt: keyData.createdAt,
       expiresAt: keyData.expiresAt,
-      createdBy: keyData.createdBy
+      createdBy: keyData.createdBy,
+      serviceRates: keyData.serviceRates
+        ? require('./serviceRatesService').parseKeyOverrides(keyData.serviceRates)
+        : {}
     }
   }
 
@@ -1052,7 +1059,8 @@ class ApiKeyService {
         'tags',
         'userId', // 新增：用户ID（所有者变更）
         'userUsername', // 新增：用户名（所有者变更）
-        'createdBy' // 新增：创建者（所有者变更）
+        'createdBy', // 新增：创建者（所有者变更）
+        'serviceRates' // 新增：服务倍率覆盖（per-key override）
       ]
       const updatedData = { ...keyData }
 
@@ -1061,6 +1069,10 @@ class ApiKeyService {
           if (field === 'restrictedModels' || field === 'allowedClients' || field === 'tags') {
             // 特殊处理数组字段
             updatedData[field] = JSON.stringify(value || [])
+          } else if (field === 'serviceRates') {
+            // 服务倍率覆盖：经 parseKeyOverrides 过滤后再 JSON 序列化；空对象/空值 ⇒ 清空
+            const sanitized = require('./serviceRatesService').parseKeyOverrides(value || {})
+            updatedData[field] = Object.keys(sanitized).length > 0 ? JSON.stringify(sanitized) : ''
           } else if (
             field === 'enableModelRestriction' ||
             field === 'enableClientRestriction' ||
@@ -1285,6 +1297,18 @@ class ApiKeyService {
         model
       )
 
+      // 应用服务倍率（Service Multiplier）：ratedCost = realCost × globalRate × keyOverrideRate
+      const realCost = costInfo.costs?.total || 0
+      const serviceRatesService = require('./serviceRatesService')
+      const earlyKeyData = await redis.getApiKey(keyId)
+      const keyOverrides = serviceRatesService.parseKeyOverrides(earlyKeyData?.serviceRates)
+      const service = serviceRatesService.detectService(null, model)
+      const ratedCost = await serviceRatesService.computeRatedCost({
+        realCost,
+        service,
+        keyOverrides
+      })
+
       // 检查是否为 1M 上下文请求
       let isLongContextRequest = false
       if (model && model.includes('[1m]')) {
@@ -1292,7 +1316,7 @@ class ApiKeyService {
         isLongContextRequest = totalInputTokens > 200000
       }
 
-      // 记录API Key级别的使用统计
+      // 记录API Key级别的使用统计（model-level cost 字段保留 realCost 用于审计）
       await redis.incrementTokenUsage(
         keyId,
         totalTokens,
@@ -1304,11 +1328,11 @@ class ApiKeyService {
         0, // ephemeral5mTokens - 暂时为0，后续处理
         0, // ephemeral1hTokens - 暂时为0，后续处理
         isLongContextRequest,
-        costInfo.costs?.total || 0 // 传递实际费用（含200K+溢价）
+        realCost // model-level cost 仍记录真实上游费用
       )
 
-      // 记录费用统计
-      if (costInfo.costs.total > 0) {
+      // 记录费用统计（API Key 配额扣费使用 ratedCost）
+      if (realCost > 0) {
         // 检查是否使用加油包
         if (useBooster) {
           // Get current used amount and limit BEFORE incrementing (防止竞态条件)
@@ -1317,10 +1341,10 @@ class ApiKeyService {
           const boosterPackAmount = parseFloat(keyData.boosterPackAmount || 0)
 
           // Check if adding this cost would exceed the limit
-          if (currentUsed + costInfo.costs.total > boosterPackAmount) {
+          if (currentUsed + ratedCost > boosterPackAmount) {
             const allowedAmount = Math.max(0, boosterPackAmount - currentUsed)
             logger.warn(
-              `⚠️ Booster pack would be exceeded for ${keyId}. Cost: $${costInfo.costs.total.toFixed(6)}, Allowed: $${allowedAmount.toFixed(6)}, Current: $${currentUsed.toFixed(6)}, Limit: $${boosterPackAmount.toFixed(2)}`
+              `⚠️ Booster pack would be exceeded for ${keyId}. RatedCost: $${ratedCost.toFixed(6)}, Allowed: $${allowedAmount.toFixed(6)}, Current: $${currentUsed.toFixed(6)}, Limit: $${boosterPackAmount.toFixed(2)}`
             )
 
             // Only charge what's remaining in booster, rest goes to normal cost
@@ -1338,7 +1362,7 @@ class ApiKeyService {
             }
 
             // Charge the excess to normal cost
-            const excessCost = costInfo.costs.total - allowedAmount
+            const excessCost = ratedCost - allowedAmount
             if (excessCost > 0) {
               await redis.incrementDailyCost(keyId, excessCost)
 
@@ -1355,30 +1379,30 @@ class ApiKeyService {
             }
           } else {
             // Normal booster pack usage - within limit
-            await redis.incrementBoosterPackUsed(keyId, costInfo.costs.total)
+            await redis.incrementBoosterPackUsed(keyId, ratedCost)
             await redis.addBoosterPackRecord(keyId, {
               timestamp: Date.now(),
-              amount: costInfo.costs.total,
+              amount: ratedCost,
               model,
               accountType: accountId ? 'account' : 'unknown'
             })
             logger.database(
-              `🚀 Recorded booster pack usage for ${keyId}: $${costInfo.costs.total.toFixed(6)}, model: ${model}`
+              `🚀 Recorded booster pack usage for ${keyId}: $${ratedCost.toFixed(6)} (real: $${realCost.toFixed(6)}), model: ${model}`
             )
           }
         } else {
           // 正常费用，不使用加油包
-          await redis.incrementDailyCost(keyId, costInfo.costs.total)
+          await redis.incrementDailyCost(keyId, ratedCost)
 
           // 记录周费用（修复：与 recordUsageWithDetails 保持一致）
           const keyDataForWeekly = await redis.getApiKey(keyId)
           const weeklyCostLimit = parseFloat(keyDataForWeekly?.weeklyCostLimit || 0)
           if (weeklyCostLimit > 0) {
-            await redis.incrementWeeklyCost(keyId, costInfo.costs.total)
+            await redis.incrementWeeklyCost(keyId, ratedCost)
           }
 
           logger.database(
-            `💰 Recorded cost for ${keyId}: $${costInfo.costs.total.toFixed(6)}, model: ${model}`
+            `💰 Recorded cost for ${keyId}: rated $${ratedCost.toFixed(6)} (real $${realCost.toFixed(6)}), service: ${service}, model: ${model}`
           )
         }
       } else {
@@ -1414,7 +1438,7 @@ class ApiKeyService {
         }
       }
 
-      // 记录单次请求的使用详情
+      // 记录单次请求的使用详情（同时存储 realCost 与 ratedCost）
       const usageCost = costInfo && costInfo.costs ? costInfo.costs.total || 0 : 0
       await redis.addUsageRecord(keyId, {
         timestamp: new Date().toISOString(),
@@ -1425,7 +1449,9 @@ class ApiKeyService {
         cacheCreateTokens,
         cacheReadTokens,
         totalTokens,
-        cost: Number(usageCost.toFixed(6)),
+        cost: Number(usageCost.toFixed(6)), // 保留为 realCost，向后兼容
+        ratedCost: Number(ratedCost.toFixed(6)),
+        service,
         costBreakdown: costInfo && costInfo.costs ? costInfo.costs : undefined
       })
 
@@ -1557,7 +1583,19 @@ class ApiKeyService {
       const outputImages = usageObject.output_images || 0
       const outputDurationSeconds = usageObject.output_duration_seconds || 0
 
-      // 记录API Key级别的使用统计 - 这个必须执行
+      // 应用服务倍率（Service Multiplier）：ratedCost = realCost × globalRate × keyOverrideRate
+      const realCost = costInfo.totalCost || 0
+      const serviceRatesService = require('./serviceRatesService')
+      const earlyKeyData = await redis.getApiKey(keyId)
+      const keyOverrides = serviceRatesService.parseKeyOverrides(earlyKeyData?.serviceRates)
+      const service = serviceRatesService.detectService(accountType, model)
+      const ratedCost = await serviceRatesService.computeRatedCost({
+        realCost,
+        service,
+        keyOverrides
+      })
+
+      // 记录API Key级别的使用统计（model-level cost 字段保留 realCost 用于审计）
       await redis.incrementTokenUsage(
         keyId,
         totalTokens,
@@ -1569,7 +1607,7 @@ class ApiKeyService {
         ephemeral5mTokens, // 传递5分钟缓存 tokens
         ephemeral1hTokens, // 传递1小时缓存 tokens
         costInfo.isLongContextRequest || false, // 传递 1M 上下文请求标记
-        costInfo.totalCost || 0 // 传递实际费用（含200K+溢价）
+        realCost // model-level cost 仍记录真实上游费用
       )
 
       // 记录媒体使用统计（如果有媒体使用）
@@ -1583,11 +1621,11 @@ class ApiKeyService {
         )
       }
 
-      // 记录费用统计
+      // 记录费用统计（API Key 配额扣费使用 ratedCost，service: ${service}）
       logger.info(
-        `💰 Cost recording - keyId: ${keyId}, totalCost: $${costInfo.totalCost?.toFixed(6)}, mediaTotalCost: $${costInfo.mediaTotalCost?.toFixed(6)}, useBooster: ${useBooster}`
+        `💰 Cost recording - keyId: ${keyId}, realCost: $${realCost.toFixed(6)}, ratedCost: $${ratedCost.toFixed(6)}, service: ${service}, mediaTotalCost: $${costInfo.mediaTotalCost?.toFixed(6)}, useBooster: ${useBooster}`
       )
-      if (costInfo.totalCost > 0) {
+      if (realCost > 0) {
         // 检查是否使用加油包
         if (useBooster) {
           // Get current used amount and limit BEFORE incrementing (防止竞态条件)
@@ -1596,10 +1634,10 @@ class ApiKeyService {
           const boosterPackAmount = parseFloat(keyData.boosterPackAmount || 0)
 
           // Check if adding this cost would exceed the limit
-          if (currentUsed + costInfo.totalCost > boosterPackAmount) {
+          if (currentUsed + ratedCost > boosterPackAmount) {
             const allowedAmount = Math.max(0, boosterPackAmount - currentUsed)
             logger.warn(
-              `⚠️ Booster pack would be exceeded for ${keyId}. Cost: $${costInfo.totalCost.toFixed(6)}, Allowed: $${allowedAmount.toFixed(6)}, Current: $${currentUsed.toFixed(6)}, Limit: $${boosterPackAmount.toFixed(2)}`
+              `⚠️ Booster pack would be exceeded for ${keyId}. RatedCost: $${ratedCost.toFixed(6)}, Allowed: $${allowedAmount.toFixed(6)}, Current: $${currentUsed.toFixed(6)}, Limit: $${boosterPackAmount.toFixed(2)}`
             )
 
             // Only charge what's remaining in booster, rest goes to normal cost
@@ -1617,7 +1655,7 @@ class ApiKeyService {
             }
 
             // Charge the excess to normal cost
-            const excessCost = costInfo.totalCost - allowedAmount
+            const excessCost = ratedCost - allowedAmount
             if (excessCost > 0) {
               await redis.incrementDailyCost(keyId, excessCost)
               // 只在设置了周限制时才记录周成本
@@ -1631,38 +1669,38 @@ class ApiKeyService {
             }
           } else {
             // Normal booster pack usage - within limit
-            await redis.incrementBoosterPackUsed(keyId, costInfo.totalCost)
+            await redis.incrementBoosterPackUsed(keyId, ratedCost)
             await redis.addBoosterPackRecord(keyId, {
               timestamp: Date.now(),
-              amount: costInfo.totalCost,
+              amount: ratedCost,
               model,
               accountType: accountType || 'unknown'
             })
             logger.database(
-              `🚀 Recorded booster pack usage for ${keyId}: $${costInfo.totalCost.toFixed(6)}, model: ${model}`
+              `🚀 Recorded booster pack usage for ${keyId}: $${ratedCost.toFixed(6)} (real $${realCost.toFixed(6)}), model: ${model}`
             )
           }
         } else {
           // 正常费用，不使用加油包
-          await redis.incrementDailyCost(keyId, costInfo.totalCost)
+          await redis.incrementDailyCost(keyId, ratedCost)
           // 只在设置了周限制时才记录周成本（固定7天窗口）
           const keyDataForWeekly = await redis.getApiKey(keyId)
           const weeklyCostLimit = parseFloat(keyDataForWeekly?.weeklyCostLimit || 0)
           logger.info(
-            `💰 Weekly cost check - keyId: ${keyId}, weeklyCostLimit: $${weeklyCostLimit}, totalCost: $${costInfo.totalCost.toFixed(6)}`
+            `💰 Weekly cost check - keyId: ${keyId}, weeklyCostLimit: $${weeklyCostLimit}, ratedCost: $${ratedCost.toFixed(6)}`
           )
           if (weeklyCostLimit > 0) {
-            await redis.incrementWeeklyCost(keyId, costInfo.totalCost)
+            await redis.incrementWeeklyCost(keyId, ratedCost)
             logger.info(
-              `💰 Weekly cost recorded - keyId: ${keyId}, amount: $${costInfo.totalCost.toFixed(6)}`
+              `💰 Weekly cost recorded - keyId: ${keyId}, amount: $${ratedCost.toFixed(6)}`
             )
           }
           logger.database(
-            `💰 Recorded cost for ${keyId}: $${costInfo.totalCost.toFixed(6)}, model: ${model}`
+            `💰 Recorded cost for ${keyId}: rated $${ratedCost.toFixed(6)} (real $${realCost.toFixed(6)}), service: ${service}, model: ${model}`
           )
         }
 
-        // 记录 Opus 周费用（如果适用，且非加油包）
+        // 记录 Opus 周费用（如果适用，且非加油包）— 仍使用真实费用
         if (!useBooster) {
           await this.recordOpusCost(keyId, costInfo.totalCost, model, accountType)
         }
@@ -1736,7 +1774,9 @@ class ApiKeyService {
         inputImages,
         outputImages,
         outputDurationSeconds,
-        cost: Number((costInfo.totalCost || 0).toFixed(6)),
+        cost: Number((costInfo.totalCost || 0).toFixed(6)), // realCost (向后兼容)
+        ratedCost: Number(ratedCost.toFixed(6)),
+        service,
         costBreakdown: {
           input: costInfo.inputCost || 0,
           output: costInfo.outputCost || 0,

@@ -35,6 +35,7 @@ const path = require('path')
 const config = require('../../config/config')
 const ProxyHelper = require('../utils/proxyHelper')
 const apiKeyRegenerateRoutes = require('./admin/apiKeyRegenerate')
+const serviceRatesRoutes = require('./admin/serviceRates')
 
 const router = express.Router()
 
@@ -45,6 +46,9 @@ const DASHBOARD_CACHE_TTL = 30000 // 30 秒
 
 // 挂载 API Key 重新生成路由
 router.use('/', apiKeyRegenerateRoutes)
+
+// 挂载服务倍率（Service Multiplier）管理路由
+router.use('/', serviceRatesRoutes)
 
 // 🛠️ 工具函数：处理可为空的时间字段
 function normalizeNullableDate(value) {
@@ -721,6 +725,11 @@ router.get('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
       apiKey.allowedClients = []
     }
 
+    // 解析服务倍率覆盖（serviceRates）
+    apiKey.serviceRates = require('../services/serviceRatesService').parseKeyOverrides(
+      apiKey.serviceRates
+    )
+
     // 获取用户服务来补充owner信息
     const userService = require('../services/userService')
 
@@ -1077,7 +1086,8 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       activationDays, // 新增：激活后有效天数
       activationUnit, // 新增：激活时间单位 (hours/days)
       expirationMode, // 新增：过期模式
-      icon // 新增：图标
+      icon, // 新增：图标
+      serviceRates // 新增：服务倍率覆盖 { service: number }
     } = req.body
 
     // 输入验证
@@ -1206,6 +1216,21 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       }
     }
 
+    // 验证服务倍率覆盖字段
+    if (serviceRates !== undefined && serviceRates !== null) {
+      if (typeof serviceRates !== 'object' || Array.isArray(serviceRates)) {
+        return res.status(400).json({ error: 'serviceRates must be an object' })
+      }
+      for (const [k, v] of Object.entries(serviceRates)) {
+        const num = Number(v)
+        if (!Number.isFinite(num) || num <= 0) {
+          return res
+            .status(400)
+            .json({ error: `Invalid serviceRates override for "${k}": must be > 0` })
+        }
+      }
+    }
+
     const newKey = await apiKeyService.generateApiKey({
       name,
       description,
@@ -1234,7 +1259,8 @@ router.post('/api-keys', authenticateAdmin, async (req, res) => {
       activationDays,
       activationUnit,
       expirationMode,
-      icon
+      icon,
+      serviceRates
     })
 
     logger.success(`🔑 Admin created new API key: ${name}`)
@@ -1596,7 +1622,8 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
       weeklyOpusCostLimit,
       weeklyCostLimit,
       tags,
-      ownerId // 新增：所有者ID字段
+      ownerId, // 新增：所有者ID字段
+      serviceRates // 新增：服务倍率覆盖
     } = req.body
 
     // 只允许更新指定字段
@@ -1797,6 +1824,27 @@ router.put('/api-keys/:keyId', authenticateAdmin, async (req, res) => {
         return res.status(400).json({ error: 'isActive must be a boolean' })
       }
       updates.isActive = isActive
+    }
+
+    // 处理服务倍率覆盖
+    if (serviceRates !== undefined) {
+      if (
+        serviceRates !== null &&
+        (typeof serviceRates !== 'object' || Array.isArray(serviceRates))
+      ) {
+        return res.status(400).json({ error: 'serviceRates must be an object' })
+      }
+      if (serviceRates !== null) {
+        for (const [k, v] of Object.entries(serviceRates)) {
+          const num = Number(v)
+          if (!Number.isFinite(num) || num <= 0) {
+            return res
+              .status(400)
+              .json({ error: `Invalid serviceRates override for "${k}": must be > 0` })
+          }
+        }
+      }
+      updates.serviceRates = serviceRates || {}
     }
 
     // 处理所有者变更

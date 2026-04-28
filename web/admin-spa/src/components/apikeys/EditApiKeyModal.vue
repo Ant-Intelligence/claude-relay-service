@@ -742,6 +742,48 @@
             </div>
           </div>
 
+          <!-- 服务倍率覆盖（可选） -->
+          <div class="space-y-3">
+            <button
+              class="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              type="button"
+              @click="showServiceRates = !showServiceRates"
+            >
+              <span>
+                <i class="fas fa-balance-scale mr-2 text-blue-500"></i>
+                服务倍率覆盖（可选）
+              </span>
+              <i :class="showServiceRates ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+            </button>
+            <div
+              v-show="showServiceRates"
+              class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50"
+            >
+              <p class="mb-3 text-xs text-gray-600 dark:text-gray-400">
+                可选：为此 API Key 单独覆盖某个服务的倍率。最终扣费 = 真实费用 × 全局倍率 ×
+                此处倍率。留空表示不覆盖（使用 1.0）。
+              </p>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div
+                  v-for="opt in SERVICE_RATE_OPTIONS"
+                  :key="opt.id"
+                  class="flex items-center justify-between rounded-md bg-white px-3 py-2 dark:bg-gray-700"
+                >
+                  <span class="text-sm text-gray-700 dark:text-gray-200">{{ opt.name }}</span>
+                  <input
+                    v-model.number="form.serviceRates[opt.id]"
+                    class="form-input w-24 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                    max="10"
+                    min="0.1"
+                    placeholder="不覆盖"
+                    step="0.1"
+                    type="number"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="flex gap-3 pt-4">
             <button
               class="flex-1 rounded-xl bg-gray-100 px-6 py-3 font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
@@ -855,8 +897,21 @@ const form = reactive({
   allowedClients: [],
   tags: [],
   isActive: true,
-  ownerId: '' // 新增：所有者ID
+  ownerId: '', // 新增：所有者ID
+  serviceRates: {} // 服务倍率覆盖：{ service: number }
 })
+
+// 服务倍率覆盖（Service Rate Overrides）
+const SERVICE_RATE_OPTIONS = [
+  { id: 'claude', name: 'Claude' },
+  { id: 'codex', name: 'Codex (OpenAI)' },
+  { id: 'gemini', name: 'Gemini' },
+  { id: 'droid', name: 'Droid' },
+  { id: 'bedrock', name: 'AWS Bedrock' },
+  { id: 'azure', name: 'Azure OpenAI' },
+  { id: 'ccr', name: 'CCR' }
+]
+const showServiceRates = ref(false)
 
 // 添加限制的模型
 const addRestrictedModel = () => {
@@ -1070,6 +1125,18 @@ const updateApiKey = async () => {
     // 所有者
     if (form.ownerId !== undefined) {
       data.ownerId = form.ownerId
+    }
+
+    // 服务倍率覆盖：empty / 1.0 / null 等同于"不覆盖"，发送空对象表示清除
+    {
+      const sanitized = {}
+      for (const [k, v] of Object.entries(form.serviceRates || {})) {
+        const num = Number(v)
+        if (Number.isFinite(num) && num > 0) {
+          sanitized[k] = num
+        }
+      }
+      data.serviceRates = sanitized
     }
 
     const result = await apiClient.put(`/admin/api-keys/${props.apiKey.id}`, data)
@@ -1361,6 +1428,36 @@ onMounted(async () => {
 
   // 初始化所有者
   form.ownerId = props.apiKey.userId || 'admin'
+
+  // 初始化服务倍率覆盖（来自 API Key 已存储的 serviceRates 字段）
+  const sr = props.apiKey.serviceRates
+  const initial = {}
+  if (sr && typeof sr === 'object' && !Array.isArray(sr)) {
+    for (const [k, v] of Object.entries(sr)) {
+      const num = Number(v)
+      if (Number.isFinite(num) && num > 0) {
+        initial[k] = num
+      }
+    }
+  } else if (typeof sr === 'string' && sr.trim() !== '') {
+    try {
+      const parsed = JSON.parse(sr)
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          const num = Number(v)
+          if (Number.isFinite(num) && num > 0) {
+            initial[k] = num
+          }
+        }
+      }
+    } catch (e) {
+      // 静默处理：保持空对象
+    }
+  }
+  form.serviceRates = initial
+  if (Object.keys(initial).length > 0) {
+    showServiceRates.value = true
+  }
 })
 </script>
 

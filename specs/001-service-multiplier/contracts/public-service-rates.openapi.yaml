@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: Service Multiplier — Public API
+  version: 1.0.0
+  description: |
+    Public, unauthenticated read endpoint exposing the current global
+    service multipliers. Intended for downstream pricing dashboards and
+    transparent communication to API consumers.
+
+    Per spec FR-011 / Q4: payload omits the `updatedBy` admin username.
+
+servers:
+  - url: /apiStats
+    description: Public stats router mount point (existing)
+
+paths:
+  /service-rates:
+    get:
+      summary: Get the current global service-rates configuration (public)
+      operationId: getPublicServiceRates
+      responses:
+        '200':
+          description: Current configuration (no admin metadata)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceRatesConfigPublic'
+
+components:
+  schemas:
+    ServiceRatesConfigPublic:
+      type: object
+      required: [rates, baseService]
+      properties:
+        rates:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            claude: 1.0
+            codex: 1.2
+            gemini: 0.5
+            droid: 1.0
+            bedrock: 1.0
+            azure: 1.0
+            ccr: 1.0
+        baseService:
+          type: string
+          example: claude
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Last save time. Useful for downstream tools to detect changes.
+            `null` if no admin has ever saved a configuration (defaults
+            still apply).
+      additionalProperties: false
+      description: |
+        The public payload MUST NOT include `updatedBy`. That field is
+        reserved for the authenticated admin endpoint.

@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: Service Multiplier — Admin API
+  version: 1.0.0
+  description: |
+    Admin endpoints for managing the global Service Multiplier (服务倍率)
+    configuration. All endpoints require an authenticated admin session
+    (existing `authenticateAdmin` middleware).
+
+servers:
+  - url: /admin
+    description: Admin API mount point (existing)
+
+security:
+  - adminAuth: []
+
+paths:
+  /service-rates:
+    get:
+      summary: Get the current global service-rates configuration
+      operationId: getAdminServiceRates
+      responses:
+        '200':
+          description: Current configuration (defaults merged with stored values)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceRatesConfigAdmin'
+        '401':
+          description: Not authenticated as admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Replace the global service-rates configuration
+      operationId: updateAdminServiceRates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rates]
+              properties:
+                rates:
+                  type: object
+                  additionalProperties:
+                    type: number
+                    exclusiveMinimum: 0
+                  description: |
+                    Map of service ID to multiplier. Every value must be a
+                    finite, strictly positive number. Unknown service IDs
+                    that match the supported set are accepted; unrecognized
+                    IDs cause a 400.
+                  example:
+                    claude: 1.0
+                    codex: 1.2
+                    gemini: 0.5
+                    droid: 1.0
+                    bedrock: 1.0
+                    azure: 1.0
+                    ccr: 1.0
+                baseService:
+                  type: string
+                  enum: [claude, codex, gemini, droid, bedrock, azure, ccr]
+                  description: |
+                    Optional. Identifier of the canonical "1.0" service for
+                    UI display. Defaults to `claude` if not supplied.
+      responses:
+        '200':
+          description: Configuration saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceRatesConfigAdmin'
+        '400':
+          description: Validation failure (non-positive rate, unknown service ID, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated as admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /service-rates/services:
+    get:
+      summary: List supported services with their current multipliers
+      operationId: listAdminServiceRateServices
+      description: |
+        Convenience endpoint for the admin UI. Returns one entry per
+        supported service with display metadata and the current rate.
+      responses:
+        '200':
+          description: Service list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceListEntry'
+        '401':
+          description: Not authenticated as admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: apiKey
+      in: cookie
+      name: admin_session
+      description: Existing admin session/JWT (authenticateAdmin middleware)
+
+  schemas:
+    ServiceRatesConfigAdmin:
+      type: object
+      required: [rates, baseService]
+      properties:
+        rates:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            claude: 1.0
+            codex: 1.2
+            gemini: 0.5
+            droid: 1.0
+            bedrock: 1.0
+            azure: 1.0
+            ccr: 1.0
+        baseService:
+          type: string
+          example: claude
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedBy:
+          type: string
+          nullable: true
+          description: |
+            Admin username who last saved. Returned only by admin endpoints;
+            never exposed by the public endpoint.
+
+    ServiceListEntry:
+      type: object
+      required: [id, name, rate]
+      properties:
+        id:
+          type: string
+          example: gemini
+        name:
+          type: string
+          example: Gemini
+        rate:
+          type: number
+          example: 0.5
+        isBase:
+          type: boolean
+          example: false
+        icon:
+          type: string
+          example: fa-gem
+        gradient:
+          type: string
+          example: from-blue-400 to-blue-600
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        message:
+          type: string

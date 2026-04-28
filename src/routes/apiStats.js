@@ -19,6 +19,22 @@ router.get('/', (req, res) => {
   res.redirect(301, '/admin-next/api-stats')
 })
 
+// 🌐 公开服务倍率端点（无需鉴权；不暴露 updatedBy）
+router.get('/service-rates', async (req, res) => {
+  try {
+    const serviceRatesService = require('../services/serviceRatesService')
+    const data = await serviceRatesService.getPublicRates()
+    res.set('Cache-Control', 'public, max-age=30')
+    return res.json({ success: true, data })
+  } catch (error) {
+    logger.error('Failed to load public service rates:', error)
+    return res.status(500).json({
+      error: 'Failed to load service rates',
+      message: getSafeMessage(error)
+    })
+  }
+})
+
 // 🔑 获取 API Key 对应的 ID
 router.post('/api/get-key-id', async (req, res) => {
   try {

@@ -904,6 +904,48 @@
             </div>
           </div>
 
+          <!-- 服务倍率覆盖（可选） -->
+          <div class="space-y-3">
+            <button
+              class="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              type="button"
+              @click="showServiceRates = !showServiceRates"
+            >
+              <span>
+                <i class="fas fa-balance-scale mr-2 text-blue-500"></i>
+                服务倍率覆盖（可选）
+              </span>
+              <i :class="showServiceRates ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+            </button>
+            <div
+              v-show="showServiceRates"
+              class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50"
+            >
+              <p class="mb-3 text-xs text-gray-600 dark:text-gray-400">
+                可选：为此 API Key 单独覆盖某个服务的倍率。例如全局 Gemini 倍率 0.5、此 Key 的覆盖
+                0.8，最终扣费 = 真实费用 × 0.5 × 0.8 = 0.4 倍。留空表示不覆盖（使用 1.0）。
+              </p>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div
+                  v-for="opt in SERVICE_RATE_OPTIONS"
+                  :key="opt.id"
+                  class="flex items-center justify-between rounded-md bg-white px-3 py-2 dark:bg-gray-700"
+                >
+                  <span class="text-sm text-gray-700 dark:text-gray-200">{{ opt.name }}</span>
+                  <input
+                    v-model.number="form.serviceRates[opt.id]"
+                    class="form-input w-24 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                    max="10"
+                    min="0.1"
+                    placeholder="不覆盖"
+                    step="0.1"
+                    type="number"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="flex gap-3 pt-2">
             <button
               class="flex-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
@@ -1019,8 +1061,21 @@ const form = reactive({
   modelInput: '',
   enableClientRestriction: false,
   allowedClients: [],
-  tags: []
+  tags: [],
+  serviceRates: {} // 服务倍率覆盖：{ service: number }
 })
+
+// 服务倍率覆盖（Service Rate Overrides）— UI 仅显示，提交时空对象不发送
+const SERVICE_RATE_OPTIONS = [
+  { id: 'claude', name: 'Claude' },
+  { id: 'codex', name: 'Codex (OpenAI)' },
+  { id: 'gemini', name: 'Gemini' },
+  { id: 'droid', name: 'Droid' },
+  { id: 'bedrock', name: 'AWS Bedrock' },
+  { id: 'azure', name: 'Azure OpenAI' },
+  { id: 'ccr', name: 'CCR' }
+]
+const showServiceRates = ref(false)
 
 // 加载支持的客户端和已存在的标签
 onMounted(async () => {
@@ -1476,7 +1531,18 @@ const createApiKey = async () => {
       enableModelRestriction: form.enableModelRestriction,
       restrictedModels: form.restrictedModels,
       enableClientRestriction: form.enableClientRestriction,
-      allowedClients: form.allowedClients
+      allowedClients: form.allowedClients,
+      // 仅发送非空、有效的服务倍率覆盖
+      serviceRates: (() => {
+        const sanitized = {}
+        for (const [k, v] of Object.entries(form.serviceRates || {})) {
+          const num = Number(v)
+          if (Number.isFinite(num) && num > 0) {
+            sanitized[k] = num
+          }
+        }
+        return Object.keys(sanitized).length > 0 ? sanitized : undefined
+      })()
     }
 
     // 处理Claude账户绑定（区分OAuth和Console）

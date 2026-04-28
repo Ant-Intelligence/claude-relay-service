@@ -8,6 +8,7 @@
  *   -n, --name         账户名称 (必填，支持模糊匹配)
  *   -d, --date         查询日期 (格式: YYYY-MM-DD，默认: 今天)
  *   -r, --redis        Redis URL (默认: 从环境变量或 redis://localhost:6379)
+ *   --total            查询总使用量 (汇总所有月份的模型级别数据)
  *   --all-types        搜索所有账户类型 (默认只搜索 claude 相关)
  *   --json             以 JSON 格式输出
  *   --help             显示帮助
@@ -15,7 +16,8 @@
  * 示例:
  *   node scripts/query-account-usage.js -n llm-2-api
  *   node scripts/query-account-usage.js -n llm-2-api -d 2026-03-02
- *   node scripts/query-account-usage.js -n ccplus -r redis://127.0.0.1:6380
+ *   node scripts/query-account-usage.js -n llm-2-api --total
+ *   node scripts/query-account-usage.js -n cc2-gpt-cc -r redis://127.0.0.1:6380
  *   node scripts/query-account-usage.js -n myaccount --all-types
  *   ssh -v -N -L 6380:localhost:6379 cc2
  */

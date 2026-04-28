@@ -3314,6 +3314,47 @@ redisClient.releaseAccountLock = async function (lockKey, lockValue) {
   }
 }
 
+// 📊 获取/保存系统级服务倍率配置（Service Multiplier）
+redisClient.getServiceRatesConfig = async function () {
+  try {
+    const data = await this.client.hgetall('system:service_rates')
+    if (!data || Object.keys(data).length === 0) {
+      return null
+    }
+    let rates = {}
+    if (data.rates) {
+      try {
+        rates = JSON.parse(data.rates) || {}
+      } catch (e) {
+        logger.warn(`⚠️ Failed to parse system:service_rates rates field: ${e.message}`)
+        rates = {}
+      }
+    }
+    return {
+      rates,
+      baseService: data.baseService || null,
+      updatedAt: data.updatedAt || null,
+      updatedBy: data.updatedBy || null
+    }
+  } catch (error) {
+    logger.error('Failed to read system:service_rates:', error)
+    throw error
+  }
+}
+
+redisClient.setServiceRatesConfig = async function (configToSave) {
+  if (!configToSave || typeof configToSave !== 'object') {
+    throw new Error('config must be an object')
+  }
+  const payload = {
+    rates: JSON.stringify(configToSave.rates || {}),
+    baseService: configToSave.baseService || '',
+    updatedAt: configToSave.updatedAt || '',
+    updatedBy: configToSave.updatedBy || ''
+  }
+  await this.client.hset('system:service_rates', payload)
+}
+
 // 导出时区辅助函数
 redisClient.getDateInTimezone = getDateInTimezone
 redisClient.getDateStringInTimezone = getDateStringInTimezone
