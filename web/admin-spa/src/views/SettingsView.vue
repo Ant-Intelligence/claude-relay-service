@@ -48,6 +48,18 @@
             <i class="fas fa-balance-scale mr-2"></i>
             服务倍率
           </button>
+          <button
+            :class="[
+              'border-b-2 pb-2 text-sm font-medium transition-colors',
+              activeSection === 'modelPricing'
+                ? 'border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            ]"
+            @click="activeSection = 'modelPricing'"
+          >
+            <i class="fas fa-coins mr-2"></i>
+            模型价格
+          </button>
         </nav>
       </div>
 
@@ -743,6 +755,11 @@
             </div>
           </div>
         </div>
+
+        <!-- 模型价格部分 -->
+        <div v-show="activeSection === 'modelPricing'">
+          <ModelPricingSection v-if="modelPricingMounted" />
+        </div>
       </div>
     </div>
   </div>
@@ -1331,6 +1348,7 @@ import { showToast } from '@/utils/toast'
 import { useSettingsStore } from '@/stores/settings'
 import { apiClient } from '@/config/api'
 import logger from '@/utils/logger'
+import ModelPricingSection from '@/components/settings/ModelPricingSection.vue'
 
 // 定义组件名称，用于keep-alive排除
 defineOptions({
@@ -1448,6 +1466,9 @@ const serviceRatesLoading = ref(false)
 const serviceRatesSaving = ref(false)
 const serviceRatesLoaded = ref(false)
 
+// 模型价格 lazy-mount 标志：首次激活后保持 true，避免重复挂载导致重新拉取
+const modelPricingMounted = ref(false)
+
 const getServiceName = (id) => SERVICE_DISPLAY[id]?.name || id
 const getServiceIcon = (id) => SERVICE_DISPLAY[id]?.icon || 'fa-question'
 const getServiceIconClass = (id) => SERVICE_DISPLAY[id]?.gradient || 'from-gray-400 to-gray-600'
@@ -1541,6 +1562,9 @@ const sectionWatcher = watch(activeSection, async (newSection) => {
   }
   if (newSection === 'serviceRates' && !serviceRatesLoaded.value) {
     await loadServiceRates()
+  }
+  if (newSection === 'modelPricing') {
+    modelPricingMounted.value = true
   }
 })
 

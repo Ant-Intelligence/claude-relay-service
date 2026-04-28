@@ -599,6 +599,7 @@ NEVER proactively create documentation files (\*.md) or README files. Only creat
 - Redis — existing infrastructure; two key patterns affected: `unified_claude_session_mapping:*` (extended JSON), new `stable_account_sessions:*` (Set) (001-stable-account-type)
 - Node.js 18+ (ES2020+) for backend; Vue 3 + Vite for the admin SPA. + Express.js 4.18.2, ioredis 5.3.2, axios 1.6.0, winston 3.11.0 (all existing); Vue 3, Pinia, Tailwind CSS, Font Awesome (admin SPA, all existing). No new runtime dependencies. (001-service-multiplier)
 - Redis (ioredis client). One new key `system:service_rates` (hash or JSON string) and one new optional field `serviceRates` on the existing `api_key:{id}` hash. (001-service-multiplier)
+- None new. Reuses the existing `pricingService` in-memory catalog (sourced from `data/model_pricing.json` + bundled fallback at `resources/model-pricing/model_prices_and_context_window.json`). (001-model-pricing)
 
 ## Recent Changes
 - 001-image-billing: Added Node.js 18+ + Express.js, ioredis, axios, winston

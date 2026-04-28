@@ -1,0 +1,247 @@
+openapi: 3.0.3
+info:
+  title: Model Pricing — Admin API
+  version: 1.0.0
+  description: |
+    Admin endpoints for surfacing the model price catalog used by the
+    cost-calculation pipeline. All endpoints are read-oriented; the only
+    mutation triggers a remote re-download of the catalog (no in-product
+    price editing). All endpoints require admin authentication via the
+    existing `authenticateAdmin` middleware.
+
+servers:
+  - url: /admin
+    description: Admin API mount point (existing)
+
+security:
+  - adminAuth: []
+
+paths:
+  /models/pricing:
+    get:
+      summary: Get the full in-memory model pricing catalog
+      operationId: getAdminModelPricing
+      description: |
+        Returns the entire `pricingService.pricingData` object as a
+        pass-through JSON map keyed by model name. Each entry preserves
+        the upstream JSON shape (per-token costs, context window, plus
+        any additional upstream fields). The SPA performs the
+        per-million-token conversion and the missing-field display.
+
+        If the pricing service has not yet finished initialization,
+        the handler triggers `loadPricingData()` defensively before
+        returning, so the response is never empty due to a startup
+        race.
+      responses:
+        '200':
+          description: Catalog returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingCatalogResponse'
+        '401':
+          description: Not authenticated as admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unexpected server error reading the catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /models/pricing/status:
+    get:
+      summary: Get the pricing service status
+      operationId: getAdminModelPricingStatus
+      description: |
+        Returns a small object with the catalog initialization state,
+        last-updated timestamp, model count, and next scheduled
+        auto-update timestamp. Reads in-memory state only; never
+        performs I/O.
+      responses:
+        '200':
+          description: Status returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingStatusResponse'
+        '401':
+          description: Not authenticated as admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /models/pricing/refresh:
+    post:
+      summary: Manually re-download the pricing catalog from upstream
+      operationId: refreshAdminModelPricing
+      description: |
+        Triggers `pricingService.forceUpdate()`, which downloads the
+        upstream pricing JSON and replaces the in-memory catalog
+        atomically. On failure, falls back to the bundled JSON (the
+        existing service behavior); the previously loaded catalog
+        is NOT emptied. The handler returns the
+        `{ success, message }` shape produced by `forceUpdate()`.
+        Concurrent calls are serialized only by the upstream HTTPS
+        layer (no application-level mutex; last writer wins by
+        reference assignment).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '200':
+          description: |
+            Refresh attempt completed. The `success` field in the
+            payload indicates whether the upstream download succeeded.
+            Failed downloads still return `200` so the SPA can render
+            a graceful error toast without treating the request itself
+            as an HTTP error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRefreshResponse'
+        '401':
+          description: Not authenticated as admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unexpected server error invoking the refresh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: apiKey
+      in: cookie
+      name: admin_session
+      description: Existing admin session/JWT (authenticateAdmin middleware)
+
+  schemas:
+    PricingCatalogResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ModelPricingEntry'
+          description: |
+            Catalog keyed by model name (e.g. `claude-sonnet-4-5`,
+            `gemini-2.5-pro`, `gpt-5`). Empty object when the service
+            has no data loaded.
+          example:
+            claude-sonnet-4-5:
+              input_cost_per_token: 0.000003
+              output_cost_per_token: 0.000015
+              cache_creation_input_token_cost: 0.00000375
+              cache_read_input_token_cost: 0.0000003
+              max_tokens: 200000
+              max_output_tokens: 8192
+
+    ModelPricingEntry:
+      type: object
+      description: |
+        Pass-through of one upstream pricing entry. Additional fields
+        are preserved unchanged.
+      additionalProperties: true
+      properties:
+        input_cost_per_token:
+          type: number
+          description: USD per input token.
+        output_cost_per_token:
+          type: number
+          description: USD per output token.
+        cache_creation_input_token_cost:
+          type: number
+          nullable: true
+          description: USD per cache-write token (omitted for many models).
+        cache_read_input_token_cost:
+          type: number
+          nullable: true
+          description: USD per cache-read token (omitted for many models).
+        max_tokens:
+          type: integer
+          nullable: true
+          description: Total context window in tokens.
+        max_output_tokens:
+          type: integer
+          nullable: true
+          description: Output cap; used as fallback for context-window display.
+
+    PricingStatusResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/PricingStatus'
+
+    PricingStatus:
+      type: object
+      required: [initialized, modelCount]
+      properties:
+        initialized:
+          type: boolean
+          description: True once the in-memory catalog has been populated at least once.
+          example: true
+        lastUpdated:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO-8601 timestamp of the last successful catalog load.
+          example: "2026-04-28T10:23:45.000Z"
+        modelCount:
+          type: integer
+          minimum: 0
+          example: 712
+        nextUpdate:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Scheduled timestamp of the next auto-update
+            (`lastUpdated + 24h`). `null` when uninitialized.
+          example: "2026-04-29T10:23:45.000Z"
+
+    PricingRefreshResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          description: |
+            True iff the upstream download completed and the new catalog
+            is in memory; false if the download failed and the service
+            fell back to bundled pricing.
+        message:
+          type: string
+          description: |
+            Human-readable detail surfaced verbatim by the SPA toast.
+          example: "Pricing data updated successfully"
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        message:
+          type: string

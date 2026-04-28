@@ -36,6 +36,7 @@ const config = require('../../config/config')
 const ProxyHelper = require('../utils/proxyHelper')
 const apiKeyRegenerateRoutes = require('./admin/apiKeyRegenerate')
 const serviceRatesRoutes = require('./admin/serviceRates')
+const modelPricingRoutes = require('./admin/modelPricing')
 
 const router = express.Router()
 
@@ -49,6 +50,9 @@ router.use('/', apiKeyRegenerateRoutes)
 
 // 挂载服务倍率（Service Multiplier）管理路由
 router.use('/', serviceRatesRoutes)
+
+// 挂载模型价格（Model Pricing）管理路由
+router.use('/', modelPricingRoutes)
 
 // 🛠️ 工具函数：处理可为空的时间字段
 function normalizeNullableDate(value) {
