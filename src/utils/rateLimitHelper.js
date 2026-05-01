@@ -1,6 +1,8 @@
 const redis = require('../models/redis')
 const pricingService = require('../services/pricingService')
 const CostCalculator = require('./costCalculator')
+const serviceRatesService = require('../services/serviceRatesService')
+const logger = require('./logger')
 
 function toNumber(value) {
   const num = Number(value)
@@ -69,11 +71,36 @@ async function updateRateLimitCounters(
 
   // 使用加油包时，不更新时间窗口的成本计数
   if (totalCost > 0 && rateLimitInfo.costCountKey && !useBooster) {
-    await client.incrbyfloat(rateLimitInfo.costCountKey, totalCost)
-
-    // 同时激活周限窗口（确保逻辑一致性）
     // 从 costCountKey 提取 keyId: rate_limit:cost:{keyId}
     const keyId = rateLimitInfo.costCountKey.split(':')[2]
+
+    // 应用服务倍率 (Service Multiplier)：窗口限制费用与每日/周限制保持一致，使用 ratedCost 计数
+    let ratedCost = totalCost
+    try {
+      if (keyId) {
+        const keyData = await redis.getApiKey(keyId)
+        const keyOverrides = serviceRatesService.parseKeyOverrides(keyData?.serviceRates)
+        const service = serviceRatesService.detectService(null, model)
+        ratedCost = await serviceRatesService.computeRatedCost({
+          realCost: totalCost,
+          service,
+          keyOverrides
+        })
+      }
+    } catch (error) {
+      // 失败开放：与全局费率读取失败时一致，按 realCost 计数（multiplier=1.0）
+      ratedCost = totalCost
+      logger.warn(
+        `⚠️ rateLimitHelper: failed to apply service multiplier on window cost, falling back to realCost: ${error.message}`
+      )
+    }
+
+    await client.incrbyfloat(rateLimitInfo.costCountKey, ratedCost)
+
+    // 返回值反映实际写入计数器的金额，便于上层日志一致显示
+    totalCost = ratedCost
+
+    // 同时激活周限窗口（确保逻辑一致性）
     if (keyId) {
       const weeklyWindowKey = `usage:cost:weekly:window_start:${keyId}`
       const exists = await client.exists(weeklyWindowKey)
